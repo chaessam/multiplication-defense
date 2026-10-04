@@ -512,6 +512,7 @@ const World = (() => {
     ogre:    { skin: '#c4a56b', armor: '#7a5230', legs: '#9b8250', weapon: 'club', bulk: true, tusk: true, eye: '#d22' },
     troll:   { skin: '#86a7b6', armor: '#526156', legs: '#6c8a96', weapon: 'club', bulk: true, tusk: true, eye: '#ffef5a' },
     orcking: { skin: '#5aa046', armor: '#3b2b22', legs: '#3f7a30', helm: 'horn', weapon: 'axe', bulk: true, tusk: true, eye: '#f33', cape: '#b3261e' },
+    demonking: { skin: '#8a2333', armor: '#2b2236', legs: '#1c1724', helm: 'demon', weapon: 'greatsword', bulk: true, eye: '#ff3b2f', cape: '#7a0f1f', spikes: true },
   };
 
   function buildHumanoid(L) {
@@ -544,6 +545,16 @@ const World = (() => {
       body.add(part(G.cyl8, mat('#c3cad4', { metalness: 0.4, roughness: 0.45 }), 0.33, 0.42, 0.33, 0.02, headY + 0.04, 0));
       body.add(part(G.box, mat('#222'), 0.04, 0.05, 0.36, 0.34, headY + 0.04, 0));
       body.add(part(G.box, mat(L.plume), 0.5, 0.18, 0.08, -0.08, headY + 0.32, 0));
+    } else if (L.helm === 'demon') {
+      // 마왕: 커다란 뿔 + 금관
+      const gold = mat('#f4c247', { metalness: 0.5, roughness: 0.35 });
+      body.add(part(G.halfSphere, mat('#1c1724', { metalness: 0.4, roughness: 0.4 }), 0.34, 0.3, 0.34, 0.02, headY + 0.04, 0));
+      body.add(part(G.cyl8, gold, 0.3, 0.12, 0.3, 0.02, headY + 0.24, 0));
+      for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2; body.add(part(G.cone4, gold, 0.05, 0.2, 0.05, 0.02 + Math.cos(a) * 0.26, headY + 0.38, Math.sin(a) * 0.26)); }
+      [-1, 1].forEach(sd => {
+        const h1 = part(G.cone6, mat('#2a2030'), 0.11, 0.55, 0.11, -0.05, headY + 0.32, sd * 0.3); h1.rotation.x = sd * -1.0; body.add(h1);
+        const h2 = part(G.cone6, mat('#e8dcc0'), 0.07, 0.4, 0.07, -0.1, headY + 0.62, sd * 0.55); h2.rotation.x = sd * -0.2; h2.rotation.z = 0.4; body.add(h2);
+      });
     } else if (L.helm === 'horn') {
       body.add(part(G.halfSphere, mat('#5b5148'), 0.33, 0.3, 0.33, 0.02, headY + 0.04, 0));
       [-1, 1].forEach(s => { const h = part(G.cone6, mat('#efe5cb'), 0.08, 0.42, 0.08, 0, headY + 0.3, s * 0.3); h.rotation.x = s * -0.6; body.add(h); });
@@ -569,9 +580,20 @@ const World = (() => {
     } else if (L.weapon === 'club') {
       const cl = part(G.cyl6, woodM, 0.09, 1.1, 0.09, 0.15, 0.45, 0); cl.rotation.z = -0.35; hand.add(cl);
       hand.add(part(G.ico, mat('#6b4628'), 0.24, 0.3, 0.24, 0.35, 1.0, 0));
+    } else if (L.weapon === 'greatsword') {
+      const bl = part(G.box, mat('#ff4a3a', { emissive: '#ff2a1a', emissiveIntensity: 0.9, roughness: 0.3 }), 0.12, 1.5, 0.05, 0.3, 0.85, 0); bl.rotation.z = -0.35; hand.add(bl);
+      hand.add(part(G.box, mat('#f4c247'), 0.1, 0.08, 0.45, 0.04, 0.1, 0));
+      hand.add(part(G.box, mat('#2a2030'), 0.07, 0.3, 0.07, -0.02, -0.08, 0));
     } else if (L.weapon === 'axe') {
       const h = part(G.cyl6, woodM, 0.05, 1.4, 0.05, 0.1, 0.55, 0); h.rotation.z = -0.2; hand.add(h);
       hand.add(part(G.box, mat('#c9ced6', { metalness: 0.5, roughness: 0.35 }), 0.55, 0.4, 0.06, 0.38, 1.1, 0));
+    }
+    if (L.spikes) {
+      // 어깨 가시 갑옷
+      [-1, 1].forEach(sd => {
+        body.add(part(G.ico, mat('#3a3046', { metalness: 0.4, roughness: 0.4 }), 0.26, 0.2, 0.26, 0, shoulderY + 0.05, sd * sz));
+        for (let i = 0; i < 3; i++) { const sp = part(G.cone4, mat('#c9c2d6'), 0.05, 0.25, 0.05, -0.1 + i * 0.1, shoulderY + 0.25, sd * sz); body.add(sp); }
+      });
     }
     if (L.shield) {
       const sh = part(G.cyl8, mat(L.shield), 0.3, 0.07, 0.3, 0.1, -0.3, -0.1);
@@ -661,6 +683,12 @@ const World = (() => {
     ring.scale.setScalar(sc); ring.position.y = 0.08; ring.visible = false;
     root.add(ring);
     root.userData = { model: g, ice, ring, sc };
+    if (e.def.final) {
+      const aura = new T.Mesh(new T.RingGeometry(0.7, 1.2, 24).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: '#ff2a3a', transparent: true, opacity: 0.3, depthWrite: false }));
+      aura.position.y = 0.1; aura.scale.setScalar(sc * 0.9);
+      root.add(aura);
+      root.userData.aura = aura;
+    }
     scene.add(root);
     enemyObjs.set(e, root);
   }
@@ -848,6 +876,11 @@ const World = (() => {
       const hit = e.hitT > 0 ? 1.15 : 1;
       m.scale.setScalar(o.userData.sc * hit);
       o.userData.ice.visible = e.frozen > 0;
+      if (o.userData.aura) {
+        o.userData.aura.rotation.y = time;
+        o.userData.aura.material.opacity = 0.25 + Math.sin(time * 4) * 0.1;
+        if (Math.random() < 0.5) burst(e.x + (Math.random() - 0.5) * 2, 0.3, e.z + (Math.random() - 0.5) * 2, 1, ['#ff2a3a', '#7a0f1f', '#2b2236'], 0.3, { grav: 4, size: 1.6 });
+      }
       o.userData.ring.visible = e.slowT > 0 && e.frozen <= 0;
       if (o.userData.ring.visible) o.userData.ring.rotation.y = time * 2;
     }

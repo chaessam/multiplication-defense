@@ -5,6 +5,7 @@
   // ================= 데이터 =================
   const SAVE_KEY = 'gugudan-defense-save-v1';
   const BEST_KEY = 'gugudan-defense-best';
+  const RECORD_KEY = 'gugudan-defense-records';
   const SOUND_KEY = 'gugudan-defense-muted';
   const CROSS_TIME = 24; // 1웨이브 병사가 길 끝까지 가는 시간(초)
 
@@ -23,8 +24,27 @@
     orcking: { name: '오크 대족장', hp: 1100, speed: 0.6, size: 2.0, dmg: 40, gems: 20, probs: 5, boss: true },
     dragon:  { name: '붉은 드래곤', hp: 1700, speed: 0.65, size: 0.85, dmg: 55, gems: 30, probs: 6, boss: true, fly: true },
     lich:    { name: '해골 마왕', hp: 2400, speed: 0.58, size: 1.9, dmg: 70, gems: 40, probs: 7, boss: true, float: true },
+    demonking: { name: '마왕', hp: 3500, speed: 0.42, size: 2.3, dmg: 120, gems: 100, probs: 12, boss: true, final: true },
   };
   const BOSS_ORDER = ['orcking', 'dragon', 'lich'];
+  const FINAL_WAVE = 30;
+
+  // 난이도
+  const DIFFS = {
+    easy: {
+      name: '쉬움', icon: '🌱', desc: '구구단 연습 중인 친구에게! 적이 느리고, 단이 천천히 늘어나요. 틀리면 힌트가 나와요.',
+      speed: 0.7, hp: 0.6, count: 0.75, interval: 1.3, gold: 1.25, castle: 150, startGold: 120, hint: true,
+    },
+    normal: {
+      name: '보통', icon: '⚔️', desc: '기본 난이도. 2단부터 시작해서 점점 어려운 단이 나와요.',
+      speed: 1, hp: 1, count: 1, interval: 1, gold: 1, castle: 100, startGold: 80,
+    },
+    hard: {
+      name: '어려움', icon: '🔥', desc: '구구단 고수 도전! 처음부터 2~9단이 모두 나오고, 적이 빠르고 튼튼해요.',
+      speed: 1.2, hp: 1.35, count: 1.2, interval: 0.85, gold: 0.9, castle: 100, startGold: 80, allDan: true,
+    },
+  };
+  const D = () => DIFFS[S.diff] || DIFFS.normal;
 
   const UPGRADES = {
     castle: { name: '성벽 강화', icon: '🏰', base: 60, growth: 1.4, max: 20, desc: l => `최대 체력 +25 (지금 ${castleMax(l)})` },
@@ -41,7 +61,7 @@
     meteor: { name: '유성 낙하', cost: 20 },
   };
 
-  function castleMax(lvl) { return 100 + 25 * lvl; }
+  function castleMax(lvl) { return D().castle + 25 * lvl; }
   function upCost(key, lvl) { const u = UPGRADES[key]; return Math.round(u.base * Math.pow(u.growth, lvl)); }
   const randInt = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
   const emptyUp = () => ({ castle: 0, archer: 0, cannon: 0, mage: 0, speed: 0, bounty: 0 });
@@ -50,6 +70,7 @@
   const S = {
     mode: 'title', // title | prep | wave | over
     paused: false,
+    diff: 'normal', cleared: false,
     wave: 1, gold: 0, gems: 0,
     castleHp: 100, castleMax: 100,
     up: emptyUp(),
@@ -88,6 +109,13 @@
 
   // ================= 문제 =================
   function danRange(w) {
+    if (D().allDan) return [2, 9];
+    if (S.diff === 'easy') {
+      // 쉬움: 2웨이브마다 새 단이 하나씩 열리고, 15웨이브부터 전체
+      if (w >= 15) return [2, 9];
+      const max = Math.min(9, 2 + Math.floor((w - 1) / 2));
+      return [Math.max(2, max - 3), max];
+    }
     if (w >= 9) return [2, 9];
     const max = Math.min(9, w + 1);
     return [Math.max(2, max - 3), max];
@@ -97,9 +125,9 @@
     for (let tries = 0; tries < 12; tries++) {
       let a;
       if (isBoss) a = randInt(Math.max(lo, Math.ceil((lo + hi) / 2)), hi);
-      else if (S.wave >= 9 && Math.random() < 0.35) a = randInt(6, 9);
+      else if (lo === 2 && hi === 9 && S.diff !== 'easy' && Math.random() < 0.35) a = randInt(6, 9);
       else a = randInt(lo, hi);
-      const b = S.wave <= 3 ? randInt(1, 9) : randInt(2, 9);
+      const b = S.diff === 'easy' || (S.diff === 'normal' && S.wave <= 3) ? randInt(1, 9) : randInt(2, 9);
       const dup = S.enemies.some(e => e.q && e.q.a === a && e.q.b === b);
       if (!dup || tries === 11) return { a, b, ans: a * b };
     }
@@ -108,7 +136,7 @@
   // ================= 웨이브 구성 =================
   function buildWave(w) {
     const list = [];
-    const n = Math.min(6 + Math.floor(w * 1.6), 42);
+    const n = Math.max(4, Math.round(Math.min(6 + Math.floor(w * 1.6), 42) * D().count));
     const weights = {
       goblin: w >= 3 ? 2 : 0,
       soldier: 5,
@@ -123,8 +151,9 @@
       list.push(type);
     }
     for (let i = 0; i < Math.min(3, list.length); i++) if (ENEMIES[list[i]].probs > 1) list[i] = 'soldier';
-    if (w % 5 === 0) list.push(BOSS_ORDER[(w / 5 - 1) % BOSS_ORDER.length]);
-    const interval = Math.max(0.8, 2.5 - w * 0.08);
+    if (w === FINAL_WAVE) list.push('demonking');
+    else if (w % 5 === 0) list.push(BOSS_ORDER[(w / 5 - 1) % BOSS_ORDER.length]);
+    const interval = Math.max(0.8, 2.5 - w * 0.08) * D().interval;
     return list.map((type, i) => ({ type, delay: i === 0 ? 1.2 : interval + (ENEMIES[type].probs > 1 ? 1.2 : 0) + (ENEMIES[type].boss ? 2.5 : 0) }));
   }
 
@@ -152,12 +181,12 @@
   function spawnEnemy(type) {
     const def = ENEMIES[type];
     const lane = def.boss ? 0 : def.probs > 1 ? (Math.random() < 0.5 ? -0.35 : 0.35) : (Math.random() - 0.5) * 1.5;
-    const maxHp = Math.round(def.hp * hpMul(S.wave));
+    const maxHp = Math.round(def.hp * hpMul(S.wave) * D().hp);
     const e = {
       type, def, lane,
       t: 0, x: 0, z: 0, dx: 1, dz: 0,
       hp: maxHp, maxHp, probsLeft: def.probs,
-      speed: World.pathLength / CROSS_TIME * def.speed * spdMul(S.wave) * (0.92 + Math.random() * 0.16),
+      speed: World.pathLength / CROSS_TIME * def.speed * spdMul(S.wave) * D().speed * (0.92 + Math.random() * 0.16),
       phase: Math.random() * 6, hitT: 0, slowT: 0, slowMul: 1, frozen: 0,
       q: null,
     };
@@ -165,7 +194,12 @@
     e.q = makeProblem(def.boss);
     S.enemies.push(e);
     World.addEnemy(e);
-    if (def.boss) {
+    if (def.final) {
+      showBanner(`👑 최종 보스: ${def.name} 등장!`, 'boss', 3200);
+      Sound.play('boss');
+      Sound.setIntensity(2);
+      S.shake = 12;
+    } else if (def.boss) {
       showBanner(`⚠ 보스 등장: ${def.name}!`, 'boss', 2600);
       Sound.play('boss');
       Sound.setIntensity(2);
@@ -421,7 +455,7 @@
     S.combo++;
     S.bestCombo = Math.max(S.bestCombo, S.combo);
     S.stats.correct++;
-    const gold = Math.round((4 + e.q.a) * (1 + 0.15 * S.up.bounty)) + Math.min(10, Math.floor(S.combo / 5) * 2);
+    const gold = Math.round((4 + e.q.a) * (1 + 0.15 * S.up.bounty) * D().gold) + Math.min(10, Math.floor(S.combo / 5) * 2);
     S.gold += gold;
     const c = enemyCenter(e);
     floater(c.x, World.enemyHeadY(e) + 0.4, c.z, `+${gold}`, '#ffd34a', 24);
@@ -450,6 +484,11 @@
     S.stats.wrong++;
     Sound.play('wrong');
     flashBox('wrong');
+    // 쉬움: 성에 가장 가까운 적에게 건너뛰며 세기 힌트 표시
+    if (D().hint) {
+      const lead = targetable().sort((a, b) => b.t - a.t)[0];
+      if (lead) lead.hint = true;
+    }
   }
 
   let boxTimer = 0;
@@ -536,10 +575,39 @@
     S.castleHp = Math.min(max, S.castleHp + Math.round(max * 0.1));
     showBanner(`🎉 웨이브 ${S.wave} 승리! +${bonus}G`, 'good', 2400);
     Sound.play('victory');
+    const clearedNow = S.wave === FINAL_WAVE && !S.cleared;
+    if (clearedNow) S.cleared = true;
     S.wave++;
-    const best = +(lsGet(BEST_KEY) || 0);
-    try { if (S.wave - 1 > best) localStorage.setItem(BEST_KEY, String(S.wave - 1)); } catch (_) { /* 무시 */ }
+    updateRecord(S.wave - 1, clearedNow);
     enterPrep();
+    if (clearedNow) showClear();
+  }
+
+  // ================= 기록 (난이도별 최고 웨이브, 클리어 여부) =================
+  function loadRecords() {
+    let r = {};
+    try { r = JSON.parse(lsGet(RECORD_KEY)) || {}; } catch (_) { r = {}; }
+    const old = +(lsGet(BEST_KEY) || 0); // 예전 버전 기록은 보통 난이도로
+    if (old && !(r.normal && r.normal.best >= old)) r.normal = Object.assign({ best: 0 }, r.normal, { best: old });
+    return r;
+  }
+  function updateRecord(wave, cleared) {
+    const r = loadRecords();
+    const cur = r[S.diff] || { best: 0, cleared: false };
+    cur.best = Math.max(cur.best || 0, wave);
+    if (cleared) cur.cleared = true;
+    r[S.diff] = cur;
+    try { localStorage.setItem(RECORD_KEY, JSON.stringify(r)); } catch (_) { /* 무시 */ }
+  }
+
+  function showClear() {
+    Sound.play('victory');
+    setTimeout(() => Sound.play('upgrade'), 600);
+    $('clearStats').innerHTML =
+      `난이도 <b>${D().icon} ${D().name}</b>에서 마왕을 물리쳤어요!<br>` +
+      `정답 ${S.stats.correct}개 · 처치 ${S.stats.kills}마리 · 최고 콤보 ${S.bestCombo}`;
+    S.paused = true;
+    setTimeout(() => show('clear'), 1200);
   }
 
   function gameOver() {
@@ -551,7 +619,7 @@
     const sv = loadSave();
     $('retryWave').textContent = sv ? sv.wave : S.wave;
     $('goStats').innerHTML =
-      `웨이브 <b>${S.wave}</b>에서 쓰러졌습니다.<br>정답 ${S.stats.correct}개 · 처치 ${S.stats.kills}마리 · 최고 콤보 ${S.bestCombo}`;
+      `${D().icon} ${D().name} · 웨이브 <b>${S.wave}</b>에서 쓰러졌습니다.<br>정답 ${S.stats.correct}개 · 처치 ${S.stats.kills}마리 · 최고 콤보 ${S.bestCombo}`;
     setTimeout(() => show('gameover'), 900);
   }
 
@@ -560,7 +628,7 @@
   function save() {
     if (S.mode !== 'prep') return;
     const data = {
-      v: 2, wave: S.wave, gold: S.gold, gems: S.gems, castleHp: S.castleHp,
+      v: 2, diff: S.diff, cleared: S.cleared, wave: S.wave, gold: S.gold, gems: S.gems, castleHp: S.castleHp,
       up: S.up, towers: S.towers.map(t => ({ slot: t.slot, type: t.type, paid: t.paid })),
       stats: S.stats, bestCombo: S.bestCombo, savedAt: Date.now(),
     };
@@ -580,10 +648,12 @@
     return null;
   }
 
-  function newGame() {
+  function newGame(diff) {
     clearField(true);
+    S.diff = DIFFS[diff] ? diff : 'normal';
+    S.cleared = false;
     Object.assign(S, {
-      wave: 1, gold: 80, gems: 0, castleHp: castleMax(0), up: emptyUp(),
+      wave: 1, gold: D().startGold, gems: 0, castleHp: castleMax(0), up: emptyUp(),
       towers: [], stats: { kills: 0, correct: 0, wrong: 0 }, bestCombo: 0,
     });
     enterPrep();
@@ -591,6 +661,8 @@
 
   function loadGame(d, fullHp) {
     clearField(true);
+    S.diff = DIFFS[d.diff] ? d.diff : 'normal';
+    S.cleared = !!d.cleared;
     Object.assign(S, {
       wave: d.wave, gold: d.gold, gems: d.gems,
       up: Object.assign(emptyUp(), d.up),
@@ -659,7 +731,7 @@
       const p = World.project(e.x, World.enemyHeadY(e), e.z);
       const text = `${e.q.a} × ${e.q.b}`;
       const w = c.measureText(text).width + 22, h = 32;
-      const extra = (e.def.probs > 1 ? 12 : 0) + (e.hp < e.maxHp || e.def.boss ? 9 : 0) + (e.def.boss ? 18 : 0);
+      const extra = (e.def.probs > 1 ? 12 : 0) + (e.hp < e.maxHp || e.def.boss ? 9 : 0) + (e.def.boss ? 18 : 0) + (e.hint ? 26 : 0);
       const cx = Math.max(w / 2 + 4, Math.min(VW - w / 2 - 4, p.x));
       const minY = h + extra + 4;
       const collide = y2 => placed.find(r => cx - w / 2 < r.x2 + 3 && cx + w / 2 > r.x1 - 3 && y2 - h - extra < r.y2 + 3 && y2 > r.y1 - 3);
@@ -672,7 +744,7 @@
         y2 = Math.max(minY, foot.y + h + extra + 10);
         for (let k = 0; k < 10; k++) { const hit = collide(y2); if (!hit) break; y2 = hit.y2 + h + extra + 4; }
       }
-      placed.push({ x1: cx - w / 2, x2: cx + w / 2, y1: y2 - h - extra, y2 });
+      placed.push({ x1: cx - Math.max(w, e.hint ? 150 : 0) / 2, x2: cx + Math.max(w, e.hint ? 150 : 0) / 2, y1: y2 - h - extra, y2 });
       items.push({ e, cx, y2, w, h, text, anchor: p });
     }
     items.reverse().forEach(it => drawLabel(c, it, it.e === lead));
@@ -752,7 +824,21 @@
       c.font = '15px "Jua", sans-serif';
       c.lineWidth = 4; c.strokeStyle = 'rgba(0,0,0,.8)';
       c.strokeText(e.def.name, cx, by - 4);
-      c.fillStyle = '#ffe9a8'; c.fillText(e.def.name, cx, by - 4);
+      c.fillStyle = e.def.final ? '#ff8a7a' : '#ffe9a8'; c.fillText(e.def.name, cx, by - 4);
+      by -= 18;
+    }
+    // 쉬움 힌트: 건너뛰며 세기 (예: 7 × 4 → 7, 14, 21, ?)
+    if (e.hint) {
+      const { a, b } = e.q;
+      const seq = b === 1 ? `${a} × 1 은 그대로 ${a}!` : '💡 ' + Array.from({ length: b - 1 }, (_, i) => a * (i + 1)).join(', ') + ', ?';
+      c.font = '15px "Jua", sans-serif';
+      const tw = c.measureText(seq).width + 16;
+      const hx = Math.max(4, Math.min(VW - tw - 4, cx - tw / 2));
+      c.fillStyle = '#fff7c2'; rrect(c, hx, by - 22, tw, 22, 8); c.fill();
+      c.lineWidth = 2; c.strokeStyle = '#e09a10'; c.stroke();
+      c.fillStyle = '#7a4a00'; c.textAlign = 'left';
+      c.fillText(seq, hx + 8, by - 10.5);
+      c.textAlign = 'center';
     }
   }
 
@@ -802,8 +888,9 @@
     const el = $('prepInfo');
     if (S.mode !== 'prep') { el.classList.add('hidden'); return; }
     const p = wavePreview(S.wave);
-    let html = `다음 웨이브 <b>${S.wave}</b> · 문제 <b>${p.dan}</b> · ${p.kinds}`;
-    if (p.boss) html += ` · ⚠ <b>보스: ${p.boss}</b>`;
+    let html = `${D().icon} ${D().name} · 다음 웨이브 <b>${S.wave}</b>${S.wave > FINAL_WAVE ? ' (♾ 무한)' : ` / ${FINAL_WAVE}`} · 문제 <b>${p.dan}</b> · ${p.kinds}`;
+    if (S.wave === FINAL_WAVE) html += ` · 👑 <b>최종 보스: ${p.boss}</b>`;
+    else if (p.boss) html += ` · ⚠ <b>보스: ${p.boss}</b>`;
     if (S.towers.length === 0) html += '<br>빈 칸(+)을 눌러 탑을 세운 뒤 ⚔ 시작!';
     el.innerHTML = html;
     el.classList.remove('hidden');
@@ -827,10 +914,31 @@
     const btn = $('btnContinue');
     if (sv) {
       btn.classList.remove('hidden');
-      $('continueInfo').textContent = `웨이브 ${sv.wave} · 💰${sv.gold} · 💎${sv.gems} · 탑 ${sv.towers.length}개`;
+      const dd = DIFFS[sv.diff] || DIFFS.normal;
+      $('continueInfo').textContent = `${dd.icon} ${dd.name} · 웨이브 ${sv.wave} · 💰${sv.gold} · 💎${sv.gems} · 탑 ${sv.towers.length}개`;
     } else btn.classList.add('hidden');
-    const best = +(lsGet(BEST_KEY) || 0);
-    $('bestInfo').textContent = best ? `🏆 최고 기록: 웨이브 ${best} 클리어` : '';
+    const r = loadRecords();
+    const parts = Object.keys(DIFFS).filter(k => r[k] && r[k].best).map(k =>
+      `${DIFFS[k].icon} ${DIFFS[k].name} ${r[k].cleared ? '👑클리어' : `웨이브 ${r[k].best}`}`);
+    $('bestInfo').textContent = parts.length ? `🏆 최고 기록 · ${parts.join(' · ')}` : '';
+  }
+
+  // 새 게임: 난이도 고르기
+  function openDifficulty() {
+    const r = loadRecords();
+    hide('title');
+    openModal('난이도 선택', `<div class="opt-list">${Object.entries(DIFFS).map(([k, d]) => `
+      <button class="opt diff-${k}" data-diff="${k}">
+        <span class="icon">${d.icon}</span>
+        <span class="info"><b>${d.name}</b>${r[k] && r[k].cleared ? ' <span class="lvl">👑 클리어</span>' : ''}<small>${d.desc}</small></span>
+      </button>`).join('')}</div>`);
+    document.querySelectorAll('#modalBody [data-diff]').forEach(b => b.onclick = () => {
+      if (loadSave() && !confirm('저장된 게임이 있어요. 새 게임을 시작하면 지워집니다. 계속할까요?')) return;
+      closeModal();
+      beginPlay();
+      newGame(b.dataset.diff);
+      showBanner(`${D().icon} ${D().name} 난이도로 시작!`, 'good', 1600);
+    });
   }
 
   function beginPlay() {
@@ -853,6 +961,7 @@
     hide('modal');
     modalOpen = false;
     S.paused = false;
+    if (S.mode === 'title') show('title');
   }
   $('modalClose').onclick = closeModal;
   $('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
@@ -952,6 +1061,8 @@
       <h3>🗺 웨이브</h3>
       <ul><li>웨이브가 오를수록 적이 많아지고 빨라지며, 2단부터 점점 어려운 단이 나와요.</li>
       <li>5웨이브마다 강력한 <b>보스</b>가 등장해요!</li>
+      <li><b>30웨이브</b>의 최종 보스 <b>마왕</b>을 물리치면 클리어! 그 뒤로는 무한 모드로 계속 도전할 수 있어요.</li>
+      <li>난이도 <b>🌱쉬움</b>은 적이 느리고, 틀리면 💡 힌트(건너뛰며 세기)가 나와요.</li>
       <li>웨이브 시작 전 상태가 이 기기에 자동 저장되어 <b>이어하기</b>가 가능해요.</li></ul>
       <h3>⌨ PC 단축키</h3>
       <ul><li>숫자 입력 · Enter 확인 · Backspace 지우기 · Space 웨이브 시작/2배속 · Esc 일시정지</li></ul>
@@ -1017,6 +1128,7 @@
   };
 
   window.addEventListener('keydown', ev => {
+    if (!$('clear').classList.contains('hidden')) return;
     if (ev.key === 'Escape') {
       if (modalOpen) closeModal(); else openPause();
       return;
@@ -1034,11 +1146,7 @@
     setTimeout(() => b.classList.remove('pressed'), 90);
   }
 
-  $('btnNew').onclick = () => {
-    if (loadSave() && !confirm('저장된 게임이 있어요. 새 게임을 시작하면 지워집니다. 계속할까요?')) return;
-    beginPlay();
-    newGame();
-  };
+  $('btnNew').onclick = () => { Sound.init(); openDifficulty(); };
   $('btnContinue').onclick = () => {
     const sv = loadSave();
     if (!sv) return;
@@ -1050,9 +1158,18 @@
   $('btnRetry').onclick = () => {
     const sv = loadSave();
     beginPlay();
-    if (sv) loadGame(sv, true); else newGame();
+    if (sv) loadGame(sv, true); else newGame(S.diff);
   };
-  $('btnGoNew').onclick = () => { beginPlay(); newGame(); };
+  $('btnGoNew').onclick = () => { hide('gameover'); refreshTitle(); show('title'); S.mode = 'title'; openDifficulty(); };
+  $('btnEndless').onclick = () => { hide('clear'); S.paused = false; showBanner('♾ 무한 모드! 어디까지 갈 수 있을까?', 'boss', 2200); };
+  $('btnClearTitle').onclick = () => {
+    hide('clear');
+    S.mode = 'title';
+    clearField(true);
+    Sound.setIntensity(0);
+    refreshTitle();
+    show('title');
+  };
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {

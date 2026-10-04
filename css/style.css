@@ -263,7 +263,13 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
 .menu .big-btn { padding: 14px; font-size: 21px; }
 .link-btn { background: none; color: var(--ink); text-decoration: underline; font-size: 16px; padding: 6px; }
 .best { margin: 12px 0 0; font-size: 14px; color: #8a6a2a; }
-#goStats { font-size: 17px; line-height: 1.6; }
+#goStats, #clearStats { font-size: 17px; line-height: 1.6; }
+#clear { background: radial-gradient(ellipse at 50% 40%, rgba(255,210,63,.35), rgba(8,18,26,.7) 70%); }
+.clear-card { animation: bannerIn .6s cubic-bezier(.2,1.6,.4,1); }
+.clear-card .crest { font-size: 70px; animation: float 2s ease-in-out infinite; }
+@keyframes float { 50% { transform: translateY(-8px) rotate(-4deg); } }
+.opt.diff-easy .icon { background: #e3f7dc; border-color: #a8dc98; }
+.opt.diff-hard .icon { background: #ffe3dc; border-color: #f2ab98; }
 .close {
   position: absolute; right: 12px; top: 12px;
   width: 36px; height: 36px; border-radius: 50%;
