@@ -4,7 +4,7 @@ const GD = (() => {
   const TOWERS = {
     archer: {
       name: '궁수탑', icon: 'bow', cost: 60, range: 7.5, rate: 1.15, dmg: 14,
-      desc: '빠르게 화살을 쏘는 기본 탑',
+      desc: '빠르게 화살을 쏴서 적을 지치게 하는 기본 탑',
       levels: [
         { name: '궁수탑', desc: '나무로 지은 망루에서 궁수가 화살을 쏴요.' },
         { name: '석궁 망루', desc: '돌로 보강한 망루. 석궁병이 더 강한 화살을 쏴요.', cost: 70 },
@@ -13,7 +13,7 @@ const GD = (() => {
     },
     cannon: {
       name: '대포', icon: 'bomb', cost: 110, range: 8.2, rate: 0.42, dmg: 40, splash: 2.4,
-      desc: '느리지만 폭발로 여러 적을 공격',
+      desc: '폭발로 여러 적을 한꺼번에 지치게 해요',
       levels: [
         { name: '대포', desc: '돌 포대 위의 청동 대포. 폭발로 주변 적까지 공격해요.' },
         { name: '중포대', desc: '더 크고 무거운 포. 폭발이 더 강해요.', cost: 120 },
@@ -66,15 +66,21 @@ const GD = (() => {
   const DIFFS = {
     easy: {
       name: '쉬움', icon: 'leaf', desc: '구구단 연습 중인 친구에게! 적이 느리고, 단이 천천히 늘어나요. 틀리면 힌트가 나와요.',
-      speed: 0.7, hp: 0.6, count: 0.75, interval: 1.3, gold: 1.25, castle: 150, startGold: 120, hint: true,
+      // 2학년 기준: 한 문제에 7~8초 걸려도 탑과 함께라면 끝까지 갈 수 있게
+      spd: 0.58, spdCap: 1.3, minSpd: 0.3, hp: 0.6, iStart: 7.5, iMin: 4.4, iDec: 0.12, cBase: 5, cPer: 0.7, cMax: 20,
+      gold: 1.25, castle: 150, startGold: 120, hint: true,
     },
     normal: {
       name: '보통', icon: 'swords', desc: '기본 난이도. 2단부터 시작해서 점점 어려운 단이 나와요.',
-      speed: 1, hp: 1, count: 1, interval: 1, gold: 1, castle: 100, startGold: 80,
+      // 한 문제 3초 안팎이면 끝까지, 느리면 중간에 막힘
+      spd: 1, spdCap: 1.9, minSpd: 0.4, hp: 1, iStart: 4.0, iMin: 2.0, iDec: 0.09, cBase: 6, cPer: 1.1, cMax: 30,
+      gold: 1, castle: 100, startGold: 80,
     },
     hard: {
       name: '어려움', icon: 'fire', desc: '구구단 고수 도전! 처음부터 2~9단이 모두 나오고, 적이 빠르고 튼튼해요.',
-      speed: 1.2, hp: 1.35, count: 1.2, interval: 0.85, gold: 0.9, castle: 100, startGold: 80, allDan: true,
+      // 한 문제 2초 안쪽의 구구단 고수용
+      spd: 1.15, spdCap: 2.2, minSpd: 0.5, hp: 1.35, iStart: 2.8, iMin: 1.35, iDec: 0.07, cBase: 8, cPer: 1.3, cMax: 36,
+      gold: 0.9, castle: 100, startGold: 80, allDan: true,
     },
   };
 

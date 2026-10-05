@@ -146,7 +146,7 @@
   // ================= 웨이브 구성 =================
   function buildWave(w) {
     const list = [];
-    const n = Math.max(4, Math.round(Math.min(6 + Math.floor(w * 1.6), 42) * D().count));
+    const n = Math.min(D().cBase + Math.floor(w * D().cPer), D().cMax);
     const weights = {
       goblin: w >= 3 ? 2 : 0, soldier: 5,
       knight: w >= 4 ? 1 + w * 0.15 : 0,
@@ -162,8 +162,9 @@
     for (let i = 0; i < Math.min(3, list.length); i++) if (ENEMIES[list[i]].probs > 1) list[i] = 'soldier';
     if (w === FINAL_WAVE) list.push('demonking');
     else if (w % 5 === 0) list.push(BOSS_ORDER[(w / 5 - 1) % BOSS_ORDER.length]);
-    const interval = Math.max(0.8, 2.5 - w * 0.08) * D().interval;
-    return list.map((type, i) => ({ type, delay: i === 0 ? 1.2 : interval + (ENEMIES[type].probs > 1 ? 1.2 : 0) + (ENEMIES[type].boss ? 2.5 : 0) }));
+    // 적 사이 간격 = 그 적을 쓰러뜨리는 데 필요한 정답 수 × 한 문제에 주어지는 시간
+    const perAnswer = Math.max(D().iMin, D().iStart - w * D().iDec);
+    return list.map((type, i) => ({ type, delay: i === 0 ? 2 : perAnswer * ENEMIES[type].probs + (ENEMIES[type].boss ? 4 : 0) }));
   }
   function wavePreview(w) {
     const q = buildWave(w);
@@ -178,7 +179,7 @@
 
   // ================= 적 =================
   function hpMul(w) { return 1 + 0.18 * (w - 1) + 0.012 * (w - 1) * (w - 1); }
-  function spdMul(w) { return Math.min(2.0, 1 + 0.035 * (w - 1)); }
+  function spdMul(w) { return Math.min(D().spdCap, 1 + 0.035 * (w - 1)); }
   function setEnemyPos(e) {
     const p = World.pathAt(e.t, e.lane);
     e.x = p.x; e.z = p.z; e.dx = p.dx; e.dz = p.dz;
@@ -190,8 +191,8 @@
     const e = {
       type, def, lane, t: 0, x: 0, z: 0, dx: 1, dz: 0,
       hp: maxHp, maxHp, probsLeft: def.probs,
-      speed: BASE_SPEED * def.speed * spdMul(S.wave) * D().speed * MAPD().speed * (0.92 + Math.random() * 0.16),
-      phase: Math.random() * 6, hitT: 0, slowT: 0, slowMul: 1, frozen: 0, stun: 0, burnT: 0, burnDps: 0,
+      speed: BASE_SPEED * def.speed * spdMul(S.wave) * D().spd * MAPD().speed * (0.92 + Math.random() * 0.16),
+      phase: Math.random() * 6, hitT: 0, slowT: 0, slowMul: 1, frozen: 0, stun: 0, burnT: 0, burnDps: 0, exhausted: false,
       q: null,
     };
     setEnemyPos(e);
@@ -202,16 +203,25 @@
     if (def.boss) bossIntro(e);
   }
   function enemyCenter(e) { return { x: e.x, y: World.enemyCenterY(e), z: e.z }; }
-  function syncProbs(e) {
-    const per = e.maxHp / e.def.probs;
-    e.probsLeft = Math.max(1, Math.ceil(e.hp / per - 1e-6));
-  }
+  // 핵심 규칙: 탑·영웅 자동 공격·스킬 피해로는 '구구단 방패'를 깰 수 없다.
+  // 체력이 바닥나면 적은 '지친' 상태(느려짐)가 되고, 마지막 한 방은 정답(lethal)만 가능하다.
+  function hpFloor(e) { return e.def.probs > 1 ? (e.probsLeft - 1) * (e.maxHp / e.def.probs) : 0; }
   function damage(e, amt, opts = {}) {
     if (e.dead) return;
-    e.hp -= amt;
     if (!opts.silent) e.hitT = Math.max(e.hitT, 0.1);
-    if (e.hp <= 0) kill(e);
-    else if (e.def.probs > 1) syncProbs(e);
+    if (opts.lethal) {
+      e.hp -= amt;
+      if (e.hp <= 0) kill(e);
+      return;
+    }
+    if (e.exhausted) return;
+    const floor = hpFloor(e);
+    e.hp = Math.max(floor, e.hp - amt);
+    if (e.hp <= floor + 1e-6) exhaust(e);
+  }
+  function exhaust(e) {
+    if (e.exhausted) return;
+    e.exhausted = true;
   }
   function kill(e) {
     if (e.dead) return;
@@ -362,7 +372,7 @@
       }
     }
   }
-  function knock(e, units) { e.t = Math.max(0, e.t - units / World.pathLength); }
+  function knock(e, units, force) { if (e.exhausted && !force) return; e.t = Math.max(0, e.t - units / World.pathLength); }
 
   // ================= 영웅 =================
   function heroDmg() { return HERO.dmg * (1 + 0.3 * S.up.hero) * (1 + MOD.heroDmg) * (1 + 0.1 * (S.wave - 1)); }
@@ -408,10 +418,12 @@
         World.explosion(e.x, 0.6, e.z, 1.8, '#ffe14a');
         Sound.play('hit');
         if (e.dead) return;
+        // 필살기는 정답으로 모은 힘이라 쓰러뜨릴 수 있음: 일반 적은 처치, 보스는 정답 1개 분량
         if (e.def.boss) {
           const per = e.maxHp / e.def.probs;
-          damage(e, per * 2 * pow);
-        } else damage(e, e.maxHp * 0.6 * pow);
+          if (e.probsLeft <= 1) damage(e, e.hp + 1, { lethal: true });
+          else { e.probsLeft--; e.hp = Math.min(e.hp, e.probsLeft * per); e.exhausted = false; e.q = makeProblem(true); e.hitT = 0.2; }
+        } else damage(e, e.maxHp * pow + e.hp, { lethal: true });
         S.enemies = S.enemies.filter(x => !x.dead);
       }, 'blade');
     });
@@ -437,9 +449,11 @@
       e.stun = Math.max(0, e.stun - dt);
       if (e.slowT > 0) { e.slowT -= dt; if (e.slowT <= 0) e.slowMul = 1; }
       if (e.burnT > 0) { e.burnT -= dt; damage(e, e.burnDps * dt, { silent: true }); if (e.dead) continue; }
-      let sp = e.speed * (1 - MOD.mud);
+      let k = 1 - MOD.mud;
+      if (e.slowT > 0) k *= e.slowMul;
+      if (e.exhausted) k *= e.def.boss ? 0.65 : 0.45;
+      let sp = e.speed * Math.max(D().minSpd, k); // 탑만으로 영원히 붙잡아 둘 수는 없음
       if (e.frozen > 0 || e.stun > 0) sp = 0;
-      else if (e.slowT > 0) sp *= e.slowMul;
       e.t += sp * dt / World.pathLength;
       setEnemyPos(e);
       e.phase += sp * dt * 3.2 / Math.max(0.8, e.def.size);
@@ -514,11 +528,12 @@
     if (S.ws) { S.ws.correct++; S.ws.combo = Math.max(S.ws.combo, S.combo); }
     Profile.correct(e.q.a, S.combo);
     const comboBonus = Math.min(MOD.comboCap, Math.floor(S.combo / 5) * 2 * MOD.comboX);
-    const gold = Math.round((4 + e.q.a) * (1 + 0.15 * S.up.bounty) * D().gold * (MOD.danGold[e.q.a] ? 2 : 1)) + comboBonus;
+    const finisher = e.exhausted ? 1.5 : 1; // 지친 적에게 막타 보너스
+    const gold = Math.round((4 + e.q.a) * (1 + 0.15 * S.up.bounty) * D().gold * (MOD.danGold[e.q.a] ? 2 : 1) * finisher) + comboBonus;
     S.gold += gold;
     if (S.ws) S.ws.gold += gold;
     const c = enemyCenter(e);
-    floater(c.x, World.enemyHeadY(e) + 0.4, c.z, `+${gold}`, '#ffd34a', 24, 'coin');
+    floater(c.x, World.enemyHeadY(e) + 0.4, c.z, finisher > 1 ? `막타 +${gold}` : `+${gold}`, '#ffd34a', 24, 'coin');
     // 영웅이 석궁으로 번개를 쏨
     World.heroCast(e.x, e.z);
     lightningBolt(World.heroMuzzle(), c);
@@ -534,10 +549,11 @@
       const per = e.maxHp / e.def.probs;
       e.probsLeft--;
       e.hp = Math.min(e.hp, e.probsLeft * per);
+      e.exhausted = false;
       e.hitT = 0.2;
       e.q = makeProblem(e.def.boss);
       e.hint = false;
-      knock(e, e.def.boss ? 0.4 : 1.0);
+      knock(e, e.def.boss ? 0.4 : 1.0, true);
       S.shake = Math.max(S.shake, e.def.boss ? 6 : 3);
       S.hitStop = Math.max(S.hitStop, e.def.boss ? 0.1 : 0.06);
     }
@@ -546,7 +562,7 @@
       const other = S.enemies.filter(x => x !== e && !x.dead && x.t > 0.01).sort((a, b) => Math.hypot(a.x - e.x, a.z - e.z) - Math.hypot(b.x - e.x, b.z - e.z))[0];
       if (other && Math.hypot(other.x - e.x, other.z - e.z) < 7) {
         lightningBolt(c, enemyCenter(other));
-        damage(other, other.maxHp * (other.def.boss ? 0.08 : 0.5));
+        damage(other, other.maxHp * (other.def.boss ? 0.08 : 0.5), { lethal: !other.def.boss });
         floater(other.x, World.enemyHeadY(other), other.z, '연쇄!', '#9fe6ff', 16);
       }
     }
@@ -605,7 +621,7 @@
             World.explosion(p.x, 0.5, p.z, 2.2);
             Sound.play('boom');
             S.shake = Math.max(S.shake, 5);
-            if (!e.dead) damage(e, e.maxHp * (e.def.boss ? 0.15 : 0.45));
+            if (!e.dead) { damage(e, e.maxHp * (e.def.boss ? 0.15 : 0.6)); e.stun = Math.max(e.stun, 1.2); }
             S.enemies = S.enemies.filter(x => !x.dead);
           });
         });
@@ -877,11 +893,21 @@
       c.beginPath(); c.moveTo(cx, y2); c.lineTo(anchor.x, anchor.y - 6); c.stroke();
     }
     c.fillStyle = 'rgba(0,0,0,.28)'; rrect(c, x + 1, y + 3, w, h, 11); c.fill();
-    const bg = e.def.final ? '#7a1020' : boss ? '#5b2a86' : highlight ? '#fff3b0' : '#ffffff';
+    const tired = e.exhausted && !boss;
+    const bg = e.def.final ? '#7a1020' : boss ? '#5b2a86' : tired ? '#ffd9a8' : highlight ? '#fff3b0' : '#ffffff';
     c.fillStyle = bg; rrect(c, x, y, w, h, 11); c.fill();
-    c.lineWidth = highlight ? 3.5 : 2.5;
-    c.strokeStyle = e.def.final ? '#ffb0a0' : boss ? '#e7b6ff' : highlight ? '#f0a020' : '#2b3a4a';
+    c.lineWidth = highlight || e.exhausted ? 3.5 : 2.5;
+    c.strokeStyle = e.exhausted ? '#ff7a1a' : e.def.final ? '#ffb0a0' : boss ? '#e7b6ff' : highlight ? '#f0a020' : '#2b3a4a';
     c.stroke();
+    if (e.exhausted) {
+      // '막타!' 꼬리표: 지금 맞히면 보너스
+      c.font = '12px "Jua", sans-serif';
+      const tw = c.measureText('막타!').width + 10;
+      const tx = x + w - tw + 6, ty = y - 9;
+      c.fillStyle = '#ff7a1a'; rrect(c, tx, ty, tw, 15, 7); c.fill();
+      c.fillStyle = '#fff'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('막타!', tx + tw / 2, ty + 8);
+    }
     c.fillStyle = bg;
     c.beginPath(); c.moveTo(cx - 6, y2 - 1); c.lineTo(cx, y2 + 6); c.lineTo(cx + 6, y2 - 1); c.fill();
     c.font = LABEL_FONT;
@@ -1385,6 +1411,9 @@
     openModal(`${I('scroll')} 게임 방법`, `<div class="help">
       <h3>${I('castle')} 목표</h3>
       <ul><li>길을 따라 몰려오는 적들로부터 성을 지키세요. 30웨이브의 최종 보스 <b>마왕</b>을 쓰러뜨리면 클리어!</li></ul>
+      <h3>${I('shield')} 가장 중요한 규칙</h3>
+      <ul><li>적은 모두 <b>구구단 방패</b>를 들고 있어요. 탑·스킬은 적을 <b>지치게(느리게)</b> 만들 뿐, 마지막 한 방은 <b>구구단 정답</b>으로만 쓰러뜨릴 수 있어요!</li>
+      <li>지친 적에는 주황색 <b>막타!</b> 표시가 떠요. 이때 맞히면 골드 1.5배!</li></ul>
       <h3>${I('hero')} 구구단 + 영웅</h3>
       <ul><li>적 머리 위 문제(예: <b>7 × 8</b>)의 답을 입력하면 영웅이 번개를 쏴서 적을 쓰러뜨리고 <b>골드</b>를 얻어요.</li>
       <li>정답을 맞힐수록 영웅 게이지가 차요. 가득 차면 오른쪽 아래 버튼(또는 Q키)으로 필살기 <b>용사의 심판</b>!</li>

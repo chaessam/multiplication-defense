@@ -928,6 +928,11 @@ const World = (() => {
       if (rg.visible) { rg.material = e.burnT > 0 ? burnRingMat : slowRingMat; rg.rotation.y = time * 2; }
       if (e.burnT > 0 && Math.random() < 0.4) burst(e.x, 0.8 + Math.random(), e.z, 1, ['#ff7a2a', '#ffb030'], 0.3, { grav: 3 });
       if (e.stun > 0 && Math.random() < 0.3) burst(e.x, enemyHeadY(e), e.z, 1, ['#ffe14a', '#ffffff'], 0.2, { grav: 0 });
+      if (e.exhausted) {
+        // 지친 적: 비틀거림 + 머리 위 별빛
+        m.rotation.z = Math.sin(time * 5 + e.phase) * 0.12;
+        if (Math.random() < 0.18) burst(e.x, enemyHeadY(e) - 0.2, e.z, 1, ['#ffb030', '#ffe14a'], 0.15, { grav: 0, life: 0.6 });
+      } else m.rotation.z = 0;
       if (o.userData.aura) {
         o.userData.aura.rotation.y = time;
         o.userData.aura.material.opacity = 0.25 + Math.sin(time * 4) * 0.1;

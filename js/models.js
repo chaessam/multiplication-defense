@@ -54,52 +54,306 @@ const Models = (() => {
   }
 
   // ---------------- 성 ----------------
+  // 손으로 그린 질감 (돌벽 / 지붕 기와) - 캔버스로 만들어 재사용
+  const texCache = {};
+  function canvasTex(key, draw, size = 256) {
+    if (!texCache[key]) {
+      const c = document.createElement('canvas'); c.width = c.height = size;
+      draw(c.getContext('2d'), size);
+      const t = new T.CanvasTexture(c);
+      t.colorSpace = T.SRGBColorSpace; t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 4;
+      texCache[key] = t;
+    }
+    return texCache[key];
+  }
+  function shadeHex(hex, k) {
+    const n = parseInt(hex.slice(1), 16);
+    const f = v => Math.max(0, Math.min(255, Math.round(v * k)));
+    return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
+  }
+  function stoneTex(base) {
+    return canvasTex('stone' + base, (x, S) => {
+      let seed = 7;
+      const R = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      x.fillStyle = shadeHex(base, 0.62); x.fillRect(0, 0, S, S); // 줄눈
+      const bh = S / 8, bw = S / 4;
+      for (let row = 0; row < 8; row++) {
+        const off = row % 2 ? bw / 2 : 0;
+        for (let col = -1; col < 5; col++) {
+          const bx = col * bw + off + 2, by = row * bh + 2, w = bw - 4, h = bh - 4;
+          x.fillStyle = shadeHex(base, 0.86 + R() * 0.22);
+          x.fillRect(bx, by, w, h);
+          x.fillStyle = 'rgba(255,255,255,0.18)'; x.fillRect(bx, by, w, 3);   // 윗면 밝게
+          x.fillStyle = 'rgba(0,0,0,0.16)'; x.fillRect(bx, by + h - 3, w, 3); // 아랫면 어둡게
+          for (let k = 0; k < 6; k++) { x.fillStyle = `rgba(0,0,0,${0.05 + R() * 0.08})`; x.fillRect(bx + R() * w, by + R() * h, 2 + R() * 4, 2 + R() * 3); }
+        }
+      }
+    });
+  }
+  function roofTex(base) {
+    return canvasTex('roof' + base, (x, S) => {
+      x.fillStyle = shadeHex(base, 0.55); x.fillRect(0, 0, S, S);
+      const rh = S / 8, tw = S / 8;
+      for (let row = 0; row < 9; row++) {
+        const off = row % 2 ? tw / 2 : 0;
+        for (let col = -1; col < 9; col++) {
+          const cx = col * tw + off + tw / 2, cy = row * rh;
+          x.fillStyle = shadeHex(base, 0.9 + ((row * 7 + col * 3) % 5) * 0.05);
+          x.beginPath(); x.moveTo(cx - tw / 2 + 1, cy); x.lineTo(cx + tw / 2 - 1, cy);
+          x.lineTo(cx + tw / 2 - 1, cy + rh * 0.55); x.quadraticCurveTo(cx, cy + rh * 1.25, cx - tw / 2 + 1, cy + rh * 0.55); x.closePath(); x.fill();
+          x.strokeStyle = shadeHex(base, 0.6); x.lineWidth = 1.5; x.stroke();
+        }
+      }
+    });
+  }
+  function texMat(tex, rx, ry, opts = {}) {
+    const t = tex.clone(); t.needsUpdate = true; t.repeat.set(rx, ry);
+    return new T.MeshStandardMaterial(Object.assign({ map: t, roughness: 0.92 }, opts));
+  }
+  // 둥근 탑 하나 (돌 몸통 + 받침 + 돌출 회랑 + 총안 + 원뿔 지붕)
+  function roundTower(r, h, roofCol, wallTex, slitMat, opts = {}) {
+    const g = new T.Group();
+    const segs = 14;
+    g.add(part(new T.CylinderGeometry(r * 1.12, r * 1.2, 0.5, segs), texMat(wallTex, 6, 0.5, { color: '#c9c1b2' }), 1, 1, 1, 0, 0.25, 0));
+    g.add(part(new T.CylinderGeometry(r, r * 1.05, h, segs), texMat(wallTex, Math.round(r * 5), h * 1.3), 1, 1, 1, 0, h / 2, 0));
+    // 돌출 회랑 (마치콜레이션) + 받침돌
+    const ringY = h - 0.15;
+    g.add(part(new T.CylinderGeometry(r * 1.22, r * 1.12, 0.4, segs), texMat(wallTex, 6, 0.4, { color: '#d8d0c2' }), 1, 1, 1, 0, ringY, 0));
+    const stoneM = mat('#bdb5a6');
+    for (let i = 0; i < 12; i++) {
+      const a = i / 12 * Math.PI * 2;
+      g.add(part(G.box, stoneM, 0.16, 0.32, 0.16, Math.cos(a) * r * 1.08, ringY - 0.32, Math.sin(a) * r * 1.08));
+      if (i % 2 === 0) g.add(part(G.box, mat('#d8d0c2'), 0.3, 0.42, 0.24, Math.cos(a) * r * 1.16, ringY + 0.4, Math.sin(a) * r * 1.16).rotateY(-a));
+    }
+    // 화살 구멍
+    for (const [yy, aa] of opts.slits || [[h * 0.45, Math.PI], [h * 0.75, Math.PI * 0.8], [h * 0.75, Math.PI * 1.2]]) {
+      const sl = part(G.box, slitMat, 0.1, 0.42, 0.08, Math.cos(aa) * (r * 1.02), yy, -Math.sin(aa) * (r * 1.02));
+      sl.rotation.y = aa; g.add(sl);
+    }
+    // 지붕
+    const roofH = opts.roofH || r * 2.3;
+    const roof = new T.Mesh(new T.ConeGeometry(r * 1.35, roofH, segs), texMat(roofTex(roofCol), 5, 3));
+    roof.position.y = ringY + 0.35 + roofH / 2; g.add(roof);
+    g.add(part(new T.TorusGeometry(r * 1.3, 0.06, 4, segs), mat(shadeHexToHex(roofCol, 0.7)), 1, 1, 1, 0, ringY + 0.37, 0).rotateX(Math.PI / 2));
+    g.add(part(G.sphere, mat('#f4c247', { metalness: 0.5, roughness: 0.3 }), 0.12, 0.12, 0.12, 0, ringY + 0.35 + roofH + 0.05, 0));
+    g.add(part(G.cone4, mat('#f4c247', { metalness: 0.5, roughness: 0.3 }), 0.05, 0.35, 0.05, 0, ringY + 0.35 + roofH + 0.3, 0));
+    g.userData.top = ringY + 0.35 + roofH + 0.45;
+    return g;
+  }
+  function shadeHexToHex(hex, k) {
+    const n = parseInt(hex.slice(1), 16);
+    const f = v => Math.max(0, Math.min(255, Math.round(v * k)));
+    return '#' + ((1 << 24) | (f(n >> 16) << 16) | (f((n >> 8) & 255) << 8) | f(n & 255)).toString(16).slice(1);
+  }
+  // 아치 창문 (밤에 불이 켜짐)
+  function archWindow(win, w, h) {
+    // -X 방향을 바라보는 아치형 창문 (사각 + 반원), 밤에 불빛
+    const g = new T.Group();
+    const rect = new T.Mesh(new T.PlaneGeometry(w, h), win);
+    rect.rotation.y = -Math.PI / 2; g.add(rect);
+    const top = new T.Mesh(new T.CircleGeometry(w / 2, 10, 0, Math.PI), win);
+    top.rotation.y = -Math.PI / 2; top.position.y = h / 2; g.add(top);
+    const frame = new T.Mesh(new T.TorusGeometry(w / 2 + 0.03, 0.035, 4, 10, Math.PI), mat('#e8e0d0'));
+    frame.rotation.y = -Math.PI / 2; frame.position.set(-0.01, h / 2, 0); g.add(frame);
+    g.add(part(G.box, mat('#e8e0d0'), 0.1, 0.07, w + 0.16, 0, -h / 2 - 0.04, 0)); // 창턱
+    g.add(part(G.box, mat('#3a2a1e'), 0.02, h + w / 2, 0.035, -0.01, w / 4, 0)); // 창살
+    return g;
+  }
+  // 문장 방패
+  function crest(sc = 1) {
+    const g = new T.Group();
+    const sh = new T.Shape();
+    sh.moveTo(-0.4, 0.45); sh.lineTo(0.4, 0.45); sh.lineTo(0.4, 0.0); sh.quadraticCurveTo(0.38, -0.35, 0, -0.55); sh.quadraticCurveTo(-0.38, -0.35, -0.4, 0); sh.closePath();
+    const geo = new T.ExtrudeGeometry(sh, { depth: 0.08, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.04, bevelSegments: 1 });
+    const m = new T.Mesh(geo, [mat('#2f5fb8'), mat('#f4c247', { metalness: 0.5, roughness: 0.35 })]);
+    m.rotation.y = -Math.PI / 2; g.add(m);
+    // 금관 모양
+    const gold = mat('#f4c247', { metalness: 0.5, roughness: 0.3 });
+    g.add(part(G.box, gold, 0.06, 0.12, 0.42, -0.1, 0.02, 0));
+    [-0.16, 0, 0.16].forEach(z => g.add(part(G.cone4, gold, 0.06, 0.18, 0.06, -0.1, 0.17, z)));
+    g.scale.setScalar(sc);
+    return g;
+  }
+
   function buildCastle(theme) {
     const g = new T.Group();
-    const stone = mat('#d3cbbd'), stone2 = mat('#b8b0a2'), roofR = mat('#d9493c'), roofB = mat('#3f78c8'), wood = mat('#8d5b34'), gold = mat('#f4c247', { metalness: 0.3, roughness: 0.5 });
-    const win = new T.MeshStandardMaterial({ color: '#4a3b30', flatShading: true, emissive: '#ffb347', emissiveIntensity: 0 });
-    g.add(part(G.cyl8, mat(theme.castleHill), 5.4, 0.5, 6.4, 0.6, 0.25, 0));
-    g.add(part(G.box, stone, 5.2, 2.6, 7.6, 0.6, 1.3, 0));
-    for (let i = 0; i < 6; i++) {
-      g.add(part(G.box, stone2, 0.55, 0.5, 0.55, -1.8, 2.85, -3.2 + i * 1.28));
-      g.add(part(G.box, stone2, 0.55, 0.5, 0.55, 3.0, 2.85, -3.2 + i * 1.28));
+    const torches = [], flags = [];
+    const wallTex = stoneTex('#cfc6b6'), keepTex = stoneTex('#e2dacb'), darkTex = stoneTex('#a9a090');
+    const win = new T.MeshStandardMaterial({ color: '#2a1f18', emissive: '#ffb347', emissiveIntensity: 0, roughness: 0.6 });
+    const slit = mat('#1d1712');
+    const capM = mat('#bcb3a3'), merlonM = texMat(wallTex, 0.5, 0.5, { color: '#ddd5c6' });
+    const gold = mat('#f4c247', { metalness: 0.5, roughness: 0.3 });
+    const wood = mat('#8a5a32'), wood2 = mat('#6a4325'), iron = mat('#3a3d44', { metalness: 0.6, roughness: 0.4 });
+
+    // 언덕 + 바위 + 돌 기단
+    g.add(part(new T.CylinderGeometry(1, 1.12, 1, 16), mat(theme.castleHill), 5.6, 0.55, 6.6, 0.9, 0.27, 0));
+    for (let i = 0; i < 16; i++) {
+      const a = i / 16 * Math.PI * 2;
+      const rk = part(G.ico, mat(i % 2 ? '#8f98a8' : '#a3abb8'), 0.45 + (i % 3) * 0.12, 0.35, 0.5, 0.9 + Math.cos(a) * 5.7, 0.2, Math.sin(a) * 6.6);
+      rk.rotation.y = a * 3; g.add(rk);
     }
-    for (let i = 0; i < 4; i++) {
-      g.add(part(G.box, stone2, 0.55, 0.5, 0.55, -1.0 + i * 1.2, 2.85, -3.6));
-      g.add(part(G.box, stone2, 0.55, 0.5, 0.55, -1.0 + i * 1.2, 2.85, 3.6));
-    }
-    const torches = [];
-    [[-1.9, -3.7], [-1.9, 3.7], [3.1, -3.7], [3.1, 3.7]].forEach(([x, z], i) => {
-      g.add(part(G.cyl8, stone, 1.05, 4.2, 1.05, x, 2.1, z));
-      g.add(part(G.cyl8, stone2, 1.25, 0.4, 1.25, x, 4.3, z));
-      g.add(part(G.cone8, i < 2 ? roofR : roofB, 1.45, 2.0, 1.45, x, 5.5, z));
-      g.add(part(G.box, win, 0.15, 0.55, 0.3, x - 1.02, 2.6, z));
+    g.add(part(G.box, texMat(darkTex, 6, 0.6), 5.6, 0.5, 7.9, 0.9, 0.55, 0));
+
+    // ---- 성벽 (사방) ----
+    const x0 = -1.6, x1 = 3.4, z0 = -3.6, z1 = 3.6, wy = 0.8, wh = 2.3, th = 0.6;
+    const wallSeg = (cx, cz, lx, lz) => {
+      g.add(part(G.box, texMat(wallTex, Math.max(lx, lz) * 1.1, wh * 1.2), lx, wh, lz, cx, wy + wh / 2, cz));
+      g.add(part(G.box, capM, lx + (lx > lz ? 0 : 0.12), 0.14, lz + (lz > lx ? 0 : 0.12), cx, wy + wh + 0.07, cz));
+    };
+    wallSeg((x0 + x1) / 2, z0, x1 - x0, th);
+    wallSeg((x0 + x1) / 2, z1, x1 - x0, th);
+    wallSeg(x1, 0, th, z1 - z0);
+    wallSeg(x0, -2.4, th, 2.4); wallSeg(x0, 2.4, th, 2.4); // 앞벽 (가운데는 성문)
+    const merlons = (ax, az, bx, bz, n) => {
+      for (let i = 0; i <= n; i++) {
+        const f = i / n, mx = ax + (bx - ax) * f, mz = az + (bz - az) * f;
+        g.add(part(G.box, merlonM, 0.36, 0.45, 0.36, mx, wy + wh + 0.36, mz));
+      }
+    };
+    merlons(x0 + 0.9, z0 - 0.15, x1 - 0.9, z0 - 0.15, 5);
+    merlons(x0 + 0.9, z1 + 0.15, x1 - 0.9, z1 + 0.15, 5);
+    merlons(x1 + 0.15, z0 + 0.9, x1 + 0.15, z1 - 0.9, 7);
+    merlons(x0 - 0.15, z0 + 0.9, x0 - 0.15, -1.9, 2);
+    merlons(x0 - 0.15, 1.9, x0 - 0.15, z1 - 0.9, 2);
+    // 앞벽 문장 방패와 화살 구멍
+    [[-2.6, 'r'], [2.6, 'b']].forEach(([z, c]) => {
+      const sh = crest(0.55); sh.position.set(x0 - 0.34, wy + 1.4, z); g.add(sh);
+      if (c === 'b') sh.children[0].material = [mat('#c8342a'), sh.children[0].material[1]];
     });
-    g.add(part(G.box, mat('#e2dbcf'), 3.2, 5.2, 3.4, 1.2, 2.6, 0));
-    const roof = part(G.cone4, roofR, 2.7, 2.8, 2.7, 1.2, 6.6, 0); roof.rotation.y = Math.PI / 4; g.add(roof);
-    for (let i = 0; i < 3; i++) g.add(part(G.box, win, 0.15, 0.7, 0.42, -0.42, 3.4 + (i === 1 ? 0.9 : 0), -0.9 + i * 0.9));
-    g.add(part(G.box, gold, 0.12, 0.6, 0.9, -0.42, 4.6, 0));
-    g.add(part(G.box, stone2, 0.5, 2.4, 2.6, -2.05, 1.2, 0));
-    g.add(part(G.box, mat('#4a3b30'), 0.2, 1.7, 1.7, -2.3, 0.85, 0));
-    g.add(part(G.box, wood, 0.12, 1.5, 1.45, -2.38, 0.75, 0));
-    for (let i = 0; i < 3; i++) g.add(part(G.box, mat('#5f4430'), 0.13, 1.5, 0.06, -2.46, 0.75, -0.45 + i * 0.45));
-    // 성문 양옆 횃불
-    [[-2.5, 2.0, -1.5], [-2.5, 2.0, 1.5], [-2.0, 3.4, -3.7], [-2.0, 3.4, 3.7]].forEach(([x, y, z]) => {
-      const t = torch(x, y, z, 1.3); g.add(t); torches.push(t);
+    [-1.7, 1.7, -3.0, 3.0].forEach(z => g.add(part(G.box, slit, 0.06, 0.45, 0.1, x0 - 0.31, wy + 0.9, z)));
+
+    // ---- 모서리 탑 4개 ----
+    [[x0, z0, '#d9493c'], [x0, z1, '#d9493c'], [x1, z0, '#3f78c8'], [x1, z1, '#3f78c8']].forEach(([x, z, rc], i) => {
+      const t = roundTower(0.95, 3.9, rc, wallTex, slit, { roofH: 2.2 });
+      t.position.set(x, wy - 0.3, z);
+      g.add(t);
+      if (i < 2) {
+        const fl = flagOn(g, flags, x, wy - 0.3 + t.userData.top, z, '#f4c247', 0.9);
+        fl.userData.dir = 1;
+      }
     });
-    const flags = [];
-    const flagMat = mat('#e14b3c', { side: T.DoubleSide });
-    const flagMat2 = mat('#f4c247', { side: T.DoubleSide });
-    [[1.2, 8.0, 0, flagMat], [-1.9, 6.5, -3.7, flagMat2], [3.1, 6.5, 3.7, flagMat2]].forEach(([x, y, z, m]) => {
-      g.add(part(G.cyl6, wood, 0.05, 1.6, 0.05, x, y + 0.6, z));
-      const fg = new T.PlaneGeometry(1.1, 0.6, 6, 1); fg.translate(0.55, 0, 0);
-      const f = new T.Mesh(fg, m); f.position.set(x, y + 1.1, z); f.castShadow = true;
-      f.userData.base = fg.attributes.position.array.slice();
-      g.add(f); flags.push(f);
+
+    // ---- 성문 건물 (게이트하우스) ----
+    const gx0 = -2.45, gx1 = -1.1, gz = 1.55, gh = 3.3;
+    g.add(part(G.box, texMat(wallTex, 2.2, gh * 1.2), gx1 - gx0, gh, gz * 2, (gx0 + gx1) / 2, wy + gh / 2, 0));
+    g.add(part(G.box, capM, gx1 - gx0 + 0.15, 0.14, gz * 2 + 0.15, (gx0 + gx1) / 2, wy + gh + 0.07, 0));
+    merlons(gx0 - 0.05, -gz + 0.2, gx0 - 0.05, gz - 0.2, 3);
+    // 양옆 작은 원형 탑
+    [-1, 1].forEach(sd => {
+      const t = roundTower(0.62, 3.9, '#d9493c', wallTex, slit, { roofH: 1.5, slits: [[2.4, Math.PI]] });
+      t.position.set(gx0 + 0.25, wy - 0.3, sd * (gz + 0.15));
+      g.add(t);
     });
+    // 아치 입구 (어두운 통로)
+    const arch = new T.Shape();
+    const aw = 0.72, ah = 1.25;
+    arch.moveTo(-aw, 0); arch.lineTo(-aw, ah); arch.absarc(0, ah, aw, Math.PI, 0, true); arch.lineTo(aw, 0); arch.closePath();
+    const archGeo = new T.ShapeGeometry(arch, 12);
+    const hole = new T.Mesh(archGeo, mat('#15100c'));
+    hole.rotation.y = -Math.PI / 2; hole.position.set(gx0 - 0.01, wy, 0); g.add(hole);
+    // 아치 테두리 돌 (홍예석)
+    const rim = new T.Mesh(new T.TorusGeometry(aw + 0.08, 0.12, 4, 12, Math.PI), mat('#e4dccd'));
+    rim.rotation.y = -Math.PI / 2; rim.position.set(gx0 - 0.03, wy + ah, 0); g.add(rim);
+    [-1, 1].forEach(sd => g.add(part(G.box, mat('#e4dccd'), 0.12, ah, 0.22, gx0 - 0.03, wy + ah / 2, sd * (aw + 0.08))));
+    g.add(part(G.box, gold, 0.12, 0.2, 0.2, gx0 - 0.05, wy + ah + aw + 0.12, 0)); // 쐐기돌
+    // 내려온 쇠창살 (위쪽 절반)
+    for (let i = -3; i <= 3; i++) g.add(part(G.box, iron, 0.05, ah * 0.75, 0.05, gx0 - 0.05, wy + ah + aw * 0.4 - ah * 0.37, i * 0.2));
+    for (let j = 0; j < 3; j++) g.add(part(G.box, iron, 0.05, 0.05, aw * 1.9, gx0 - 0.05, wy + ah * 0.75 + j * 0.32, 0));
+    // 도개교 (나무 다리) + 쇠사슬
+    const bridge = new T.Group();
+    for (let i = 0; i < 6; i++) bridge.add(part(G.box, i % 2 ? wood : wood2, 0.22, 0.1, aw * 2.1, -i * 0.23, 0, 0));
+    bridge.add(part(G.box, iron, 1.4, 0.05, 0.06, -0.58, 0.07, aw * 1.0));
+    bridge.add(part(G.box, iron, 1.4, 0.05, 0.06, -0.58, 0.07, -aw * 1.0));
+    bridge.position.set(gx0 - 0.15, wy - 0.25, 0);
+    bridge.rotation.z = 0.12;
+    g.add(bridge);
+    [-1, 1].forEach(sd => {
+      // 성문 위에서 다리 끝까지 내려오는 쇠사슬
+      const sx = gx0 - 0.08, sy = wy + ah + aw * 0.9, ex = gx0 - 1.45, ey = wy - 0.32;
+      const len = Math.hypot(ex - sx, ey - sy);
+      const ch = part(G.cyl6, iron, 0.022, len, 0.022, (sx + ex) / 2, (sy + ey) / 2, sd * aw);
+      ch.rotation.z = Math.atan2(-(ex - sx), ey - sy); g.add(ch);
+    });
+    // 성문 위 큰 문장 + 늘어진 깃발(배너)
+    const bigCrest = crest(0.9); bigCrest.position.set(gx0 - 0.08, wy + gh - 0.75, 0); g.add(bigCrest);
+    [-1, 1].forEach(sd => {
+      const b = new T.Group();
+      b.add(part(G.box, mat('#c8342a'), 0.04, 1.3, 0.42, 0, 0, 0));
+      b.add(part(G.box, gold, 0.05, 1.3, 0.06, 0, 0, 0.18)); b.add(part(G.box, gold, 0.05, 1.3, 0.06, 0, 0, -0.18));
+      b.add(part(G.cone4, mat('#c8342a'), 0.3, 0.3, 0.03, 0, -0.78, 0).rotateZ(Math.PI));
+      b.add(part(G.oct, gold, 0.03, 0.12, 0.1, -0.03, 0.2, 0));
+      b.position.set(gx0 - 0.04, wy + 1.9, sd * 1.15);
+      g.add(b);
+    });
+    // 성문 횃불
+    [[gx0 - 0.2, wy + 1.1, -1.05], [gx0 - 0.2, wy + 1.1, 1.05]].forEach(([x, y, z]) => { const t = torch(x, y, z, 1.2); g.add(t); torches.push(t); });
+
+    // ---- 본성 (킵) ----
+    const kx0 = 0.2, kx1 = 2.8, kz = 1.6, kh = 4.9;
+    g.add(part(G.box, texMat(keepTex, 2.8, kh * 1.1), kx1 - kx0, kh, kz * 2, (kx0 + kx1) / 2, wy + kh / 2, 0));
+    // 버팀벽
+    [-1, 1].forEach(sd => {
+      g.add(part(G.box, texMat(keepTex, 0.4, 2), 0.4, kh * 0.7, 0.35, kx0 - 0.15, wy + kh * 0.35, sd * (kz - 0.15)));
+      g.add(part(G.box, capM, 0.42, 0.12, 0.37, kx0 - 0.15, wy + kh * 0.7 + 0.06, sd * (kz - 0.15)));
+    });
+    // 띠 장식
+    g.add(part(G.box, capM, kx1 - kx0 + 0.12, 0.12, kz * 2 + 0.12, (kx0 + kx1) / 2, wy + kh * 0.55, 0));
+    g.add(part(G.box, capM, kx1 - kx0 + 0.2, 0.18, kz * 2 + 0.2, (kx0 + kx1) / 2, wy + kh + 0.09, 0));
+    merlons(kx0 - 0.08, -kz + 0.25, kx0 - 0.08, kz - 0.25, 4);
+    merlons(kx0 + 0.3, -kz - 0.08, kx1 - 0.3, -kz - 0.08, 3);
+    merlons(kx0 + 0.3, kz + 0.08, kx1 - 0.3, kz + 0.08, 3);
+    // 창문 (앞면 2층, 옆면)
+    [[-0.7, wy + 1.9], [0.7, wy + 1.9], [0, wy + 3.4]].forEach(([z, y]) => { const w = archWindow(win, 0.42, 0.6); w.position.set(kx0 - 0.04, y, z); g.add(w); });
+    [-1, 1].forEach(sd => [0.8, 1.9].forEach(x => {
+      const w = archWindow(win, 0.36, 0.5); w.rotation.y = sd * Math.PI / 2; w.position.set(kx0 + x, wy + 3.0, sd * (kz + 0.04)); g.add(w);
+    }));
+    // 발코니 + 큰 문장
+    g.add(part(G.box, capM, 0.4, 0.1, 1.2, kx0 - 0.2, wy + 2.85, 0));
+    for (let i = 0; i < 5; i++) g.add(part(G.cyl6, capM, 0.04, 0.3, 0.04, kx0 - 0.36, wy + 3.05, -0.5 + i * 0.25));
+    // 지붕 (기와 질감 피라미드) + 지붕창
+    const roofG = new T.ConeGeometry(1, 1, 4, 1); roofG.rotateY(Math.PI / 4);
+    const roof = new T.Mesh(roofG, texMat(roofTex('#d9493c'), 4, 3));
+    roof.scale.set((kx1 - kx0) * 0.78, 2.6, kz * 1.55); roof.position.set((kx0 + kx1) / 2, wy + kh + 0.18 + 1.3, 0);
+    g.add(roof);
+    const dormer = new T.Group();
+    dormer.add(part(G.box, texMat(keepTex, 0.5, 0.5), 0.5, 0.5, 0.6, 0, 0, 0));
+    const dw = archWindow(win, 0.24, 0.26); dw.position.set(-0.26, -0.02, 0); dormer.add(dw);
+    const dr = part(G.cone4, texMat(roofTex('#d9493c'), 1, 1), 0.48, 0.4, 0.48, 0, 0.45, 0); dr.rotation.y = Math.PI / 4; dormer.add(dr);
+    dormer.position.set(kx0 + 0.55, wy + kh + 0.8, 0); g.add(dormer);
+    g.add(part(G.sphere, gold, 0.14, 0.14, 0.14, (kx0 + kx1) / 2, wy + kh + 2.85, 0));
+    // 뒤쪽 모서리 작은 탑
+    [-1, 1].forEach(sd => {
+      const t = roundTower(0.48, 1.6, '#3f78c8', keepTex, slit, { roofH: 1.3, slits: [] });
+      t.position.set(kx1 - 0.05, wy + kh - 0.6, sd * (kz - 0.05));
+      g.add(t);
+    });
+    // 굴뚝
+    g.add(part(G.box, texMat(darkTex, 0.3, 0.6), 0.3, 0.9, 0.3, kx1 - 0.5, wy + kh + 1.0, 0.75));
+    // 본성 큰 깃발
+    const big = flagOn(g, flags, (kx0 + kx1) / 2, wy + kh + 2.95, 0, '#e14b3c', 1.4);
+    big.userData.crown = true;
+    // 성 안 작은 집들
+    [[2.0, -2.6], [2.6, 2.7]].forEach(([x, z], i) => {
+      g.add(part(G.box, texMat(keepTex, 1, 0.6), 1.0, 0.7, 0.8, x, wy + 0.35, z));
+      const r = part(G.cone4, texMat(roofTex(i ? '#3f78c8' : '#b8572e'), 2, 1), 0.85, 0.6, 0.7, x, wy + 0.95, z); r.rotation.y = Math.PI / 4; g.add(r);
+    });
+    // 성벽 위 횃불
+    [[x0 - 0.1, wy + wh + 0.3, -1.9], [x0 - 0.1, wy + wh + 0.3, 1.9]].forEach(([x, y, z]) => { const t = torch(x, y, z, 1.1); g.add(t); torches.push(t); });
+
     shadowAll(g);
     g.userData = { flags, torches, win };
     return g;
+  }
+  // 깃대 + 펄럭이는 깃발 (world.js가 흔들어 줌)
+  function flagOn(g, flags, x, y, z, color, s = 1) {
+    g.add(part(G.cyl6, mat('#6a4325'), 0.04 * s, 1.5 * s, 0.04 * s, x, y + 0.75 * s, z));
+    g.add(part(G.sphere, mat('#f4c247', { metalness: 0.5, roughness: 0.3 }), 0.07 * s, 0.07 * s, 0.07 * s, x, y + 1.52 * s, z));
+    const fg = new T.PlaneGeometry(1.0 * s, 0.6 * s, 8, 1); fg.translate(-0.5 * s, 0, 0);
+    const f = new T.Mesh(fg, mat(color, { side: T.DoubleSide }));
+    f.position.set(x, y + 1.18 * s, z);
+    f.userData.base = fg.attributes.position.array.slice();
+    g.add(f); flags.push(f);
+    return f;
   }
 
   // ---------------- 탑 (레벨별 모델) ----------------
