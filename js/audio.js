@@ -326,8 +326,23 @@ const Sound = (() => {
     correct(combo = 0) {
       const base = 660 * Math.pow(2, Math.min(combo, 12) / 24);
       bell(base, 0.16); bell(base * 1.5, 0.12, 0.06);
-      noise(0.3, 0.16, 4500, 'highpass', 0.0);
-      tone('sawtooth', 2400, 300, 0.18, 0.05, 0.01);
+    },
+    // 장궁 시위 소리 + 불화살 휙
+    fireShot(tier = 'arrow') {
+      const n = tier === 'volley' ? 3 : 1;
+      for (let i = 0; i < n; i++) {
+        const d = i * 0.09;
+        tone('triangle', 190, 85, 0.13, 0.16, d);
+        noise(0.28, 0.13, 1300, 'bandpass', d + 0.02, 1.4);
+      }
+      if (tier === 'phoenix') { tone('sawtooth', 260, 980, 0.5, 0.06, 0.02); bell(988, 0.07, 0.05, 0.5); noise(0.6, 0.12, 900, 'bandpass', 0.05, 0.8); }
+    },
+    // 불화살이 꽂히며 불꽃이 터짐
+    fireHit(tier = 'arrow') {
+      const big = tier === 'phoenix';
+      noise(big ? 0.6 : 0.3, big ? 0.3 : 0.18, big ? 700 : 1100);
+      noise(0.18, 0.1, 3200, 'highpass', 0.02);
+      tone('sine', big ? 130 : 160, 45, big ? 0.5 : 0.25, big ? 0.45 : 0.22);
     },
     wrong() { tone('sawtooth', 200, 120, 0.25, 0.16); tone('square', 150, 95, 0.28, 0.08, 0.05); },
     arrow() { noise(0.09, 0.12, 2800, 'bandpass', 0, 2); tone('triangle', 420, 900, 0.07, 0.04); },

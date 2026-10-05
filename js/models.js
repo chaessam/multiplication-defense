@@ -554,7 +554,7 @@ const Models = (() => {
     troll:   { skin: '#86a7b6', armor: '#526156', legs: '#6c8a96', weapon: 'club', bulk: true, tusk: true, eye: '#ffef5a' },
     orcking: { skin: '#5aa046', armor: '#3b2b22', legs: '#3f7a30', helm: 'horn', weapon: 'axe', bulk: true, tusk: true, eye: '#f33', cape: '#b3261e' },
     demonking: { skin: '#8a2333', armor: '#2b2236', legs: '#1c1724', helm: 'demon', weapon: 'greatsword', bulk: true, eye: '#ff3b2f', cape: '#7a0f1f', spikes: true },
-    hero:    { skin: '#f2c39c', armor: '#3f6fd8', legs: '#2a4a9a', helm: 'hero', weapon: 'crossbow', cape: '#e5483b', belt: '#f4c247', shield: null, hero: true },
+    hero:    { skin: '#f2c39c', armor: '#3f6fd8', legs: '#2a4a9a', helm: 'hero', weapon: 'longbow', cape: '#e5483b', belt: '#f4c247', shield: null, hero: true },
     // ---- 사막 ----
     sandthief: { skin: '#c98b5a', armor: '#e9d8a6', legs: '#7a5a3a', helm: 'turban', weapon: 'scimitar', ears: true, eye: '#ffde3a', belt: '#b3261e', scarf: '#2f8f9a' },
     mummy:     { skin: '#e3d8b8', armor: '#d6c9a2', legs: '#cbbd94', helm: 'nemes', weapon: 'spear', tip: '#f4c247', eye: '#5fffd0', wraps: true, belt: '#f4c247' },

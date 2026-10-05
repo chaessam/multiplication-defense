@@ -34,6 +34,27 @@ const Icons = (() => {
     home: `<path d="M4 15L16 4l12 11v13H20v-8h-8v8H4z" fill="#fff" ${sw}/>`,
     bolt: `<path d="M18 2L6 18h8l-3 12 15-18h-9z" fill="#ffe14a" ${sw}/>`,
     shield: `<path d="M16 3l11 4v8c0 7-5 11-11 14C10 26 5 22 5 15V7z" fill="#3f8fe0" ${sw}/><path d="M16 7v18M9 13h14" stroke="#ffd23f" stroke-width="2.4"/>`,
+    // 필살기 버튼: 장궁과 불타는 화살 문장
+    firearrow: `
+      <path d="M7.6 26.2C2.6 18 6.8 6.8 18.4 4.2" fill="none" stroke="${O}" stroke-width="5.2" stroke-linecap="round"/>
+      <path d="M7.6 26.2C2.6 18 6.8 6.8 18.4 4.2" fill="none" stroke="#a8642c" stroke-width="2.8" stroke-linecap="round"/>
+      <path d="M8.2 23.4C5.6 18 7.4 10.6 14 7" fill="none" stroke="#d08a4e" stroke-width="1" stroke-linecap="round"/>
+      <rect x="5.2" y="11.4" width="3.6" height="4" rx="1.2" fill="#5a3416" stroke="${O}" stroke-width="1.4" transform="rotate(28 7 13.4)"/>
+      <circle cx="7.6" cy="26.2" r="1.7" fill="#ffd23f" stroke="${O}" stroke-width="1.3"/>
+      <circle cx="18.4" cy="4.2" r="1.7" fill="#ffd23f" stroke="${O}" stroke-width="1.3"/>
+      <path d="M7.6 26.2L18.4 4.2" stroke="#f6eedb" stroke-width="1.1"/>
+      <path d="M4.6 27.4L22 10" stroke="${O}" stroke-width="3.8" stroke-linecap="round"/>
+      <path d="M4.6 27.4L22 10" stroke="#e2b27a" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M2.8 25.2l3.4 3.4M4.8 23.2l3.4 3.4" stroke="${O}" stroke-width="4" stroke-linecap="round"/>
+      <path d="M2.8 25.2l3.4 3.4M4.8 23.2l3.4 3.4" stroke="#e5483b" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M3.8 24.2l3.4 3.4" stroke="#f6eedb" stroke-width="1.2" stroke-linecap="round"/>
+      <path d="M25.6 2.6c3.2 2.4 5 5.8 4 9-1 3.2-4.6 4.8-7.8 3.8-1.8-.6-3.2-1.8-4-3.4 1.2.6 2.6.6 3.4.2-1.8-1.8-1.9-4.3-.4-6.4.4 1.3 1.3 2 2.3 2.2-.6-1.9.6-3.8 2.5-5.4z" fill="#e5361a" ${sw}/>
+      <path d="M25.4 5.6c2 1.7 3 3.9 2.4 5.9-.6 2-2.9 3-4.9 2.4-1.2-.4-2-1.2-2.4-2.2.9.3 1.7.2 2.2-.1-1.1-1.2-1.1-2.8-.2-4.1.3.8.9 1.2 1.5 1.3-.3-1.2.4-2.3 1.4-3.2z" fill="#ff9a1f"/>
+      <path d="M25 8.6c1 .9 1.5 2 1.2 3-.3 1-1.4 1.5-2.4 1.2-.6-.2-1-.6-1.2-1.1.5.1.9.1 1.1-.1-.5-.6-.5-1.4 0-2.1.2.4.5.6.8.6-.1-.6.2-1.1.5-1.5z" fill="#ffe680"/>
+      <rect x="19.6" y="10.6" width="3.4" height="2.6" rx=".8" fill="#ff7a1a" stroke="${O}" stroke-width="1.2" transform="rotate(-45 21.3 11.9)"/>
+      <path d="M28.6 3.2l-5.8 2.6 2.8 2.8z" fill="#e8eef5" stroke="${O}" stroke-width="1.4" stroke-linejoin="round"/>
+      <path d="M27.6 3.8l-3.4 1.6" stroke="#ffffff" stroke-width=".9" stroke-linecap="round"/>
+      <circle cx="17.6" cy="17.4" r="1" fill="#ff7a1a"/><circle cx="21.4" cy="18.6" r=".8" fill="#ffd23f"/><circle cx="29.2" cy="15.2" r=".7" fill="#ffd23f"/>`,
     hero: `<path d="M6 30c0-7 4-11 10-11s10 4 10 11z" fill="#3f6fd8" ${sw}/><circle cx="16" cy="12" r="7" fill="#f2c39c" ${sw}/><path d="M8 11c0-6 4-9 8-9s8 3 8 9l-3-2-5 2-5-2z" fill="#ffd23f" ${sw}/><circle cx="13" cy="13" r="1.2" fill="#13222f"/><circle cx="19" cy="13" r="1.2" fill="#13222f"/>`,
     card: `<rect x="6" y="3" width="20" height="26" rx="3" fill="#7b6cf0" ${sw}/><path d="M16 9l2 4 4 .5-3 3 .8 4.5L16 19l-3.8 2 .8-4.5-3-3 4-.5z" fill="#ffd23f"/>`,
     check: `<path d="M5 17l7 7L27 8" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 17l7 7L27 8" fill="none" ${sw}/>`,
