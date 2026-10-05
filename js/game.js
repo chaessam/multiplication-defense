@@ -1104,7 +1104,7 @@
   }
   function updateControls() {
     if (S.mode === 'prep') {
-      btnStart.innerHTML = `${I('swords')} 웨이브 ${S.wave} 시작`;
+      btnStart.innerHTML = `<span class="l1">${I('swords')} 웨이브 ${S.wave}</span><span class="l2">시작</span>`;
       btnStart.classList.add('pulse');
       btnStart.disabled = false;
     } else if (S.mode === 'wave') {
