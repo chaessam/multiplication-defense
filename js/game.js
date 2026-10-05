@@ -7,7 +7,8 @@
   const I = Icons.html;
   const { TOWERS, LV_DMG, LV_RATE, LV_RANGE, ENEMIES, BOSS_ORDER, FINAL_WAVE, HERO, DIFFS, MAPS, MAP_ORDER, CARDS, RARITY, ACH, TIERS, UPGRADES } = GD;
 
-  const SAVE_KEY = 'gugudan-defense-save-v1';
+  const OLD_SAVE_KEY = 'gugudan-defense-save-v1';
+  const SAVE_KEY = 'gugudan-defense-saves'; // 맵마다 따로 저장: { last, maps: { forest: {...}, ... } }
   const SOUND_KEY = 'gugudan-defense-muted';
   const CROSS_TIME = 24;          // 첫 맵 기준, 1웨이브 병사가 길 끝까지 가는 시간(초)
   const BASE_SPEED = 59.6 / CROSS_TIME; // 월드 단위/초
@@ -21,7 +22,7 @@
   const S = {
     mode: 'title', // title | prep | wave | over
     paused: false,
-    diff: 'normal', map: 'forest', cleared: false,
+    diff: 'normal', lowest: 'normal', map: 'forest', cleared: false,
     wave: 1, gold: 0, gems: 0,
     castleHp: 100, castleMax: 100,
     up: emptyUp(),
@@ -37,6 +38,9 @@
     time: 0,
   };
   const D = () => DIFFS[S.diff] || DIFFS.normal;
+  const DIFF_ORDER = ['easy', 'normal', 'hard'];
+  // 기록은 이번 판에서 고른 가장 쉬운 난이도로 남김 (쉬움으로 버티다 어려움으로 바꿔 기록 얻기 방지)
+  const easier = (a, b) => DIFF_ORDER.indexOf(a) <= DIFF_ORDER.indexOf(b) ? a : b;
   const MAPD = () => MAPS[S.map] || MAPS.forest;
 
   // ================= 화면 =================
@@ -697,12 +701,25 @@
     const clearedNow = S.wave === FINAL_WAVE && !S.cleared;
     if (clearedNow) S.cleared = true;
     S.wave++;
-    Profile.record(S.map, S.diff, clearedWave, clearedNow);
+    const unlockedBefore = MAP_ORDER.filter(m => Profile.unlocked(m));
+    Profile.record(S.map, S.lowest, clearedWave, clearedNow);
+    const newMaps = MAP_ORDER.filter(m => Profile.unlocked(m) && !unlockedBefore.includes(m));
     S.pendingCards = genOffer();
     S.ws = null;
     enterPrep();
     if (clearedNow) showClear();
     else showResults({ wave: clearedWave, stars, bonus, ws });
+    newMaps.forEach((m, i) => setTimeout(() => announceMap(m), 600 + i * 900));
+  }
+  // 새 맵이 열렸을 때 크게 알림
+  function announceMap(id) {
+    const m = MAPS[id];
+    const t = document.createElement('div');
+    t.className = 'toast map-toast';
+    t.innerHTML = `<div class="medal" style="background:#ffd23f">${I(m.icon)}</div><div><small>새 맵이 열렸어요!</small><b>${m.name}</b><small class="sub">처음 화면 → 새 게임에서 고를 수 있어요</small></div>`;
+    $('toasts').appendChild(t);
+    Sound.play('achieve');
+    setTimeout(() => t.remove(), 5500);
   }
   function gameOver() {
     if (S.mode === 'over') return;
@@ -710,8 +727,8 @@
     Sound.setMode('prep');
     Sound.play('lose');
     updateControls();
-    Profile.record(S.map, S.diff, S.wave - 1, false);
-    const sv = loadSave();
+    Profile.record(S.map, S.lowest, S.wave - 1, false);
+    const sv = loadSave(S.map);
     $('retryWave').textContent = sv ? sv.wave : S.wave;
     $('goStats').innerHTML =
       `${MAPD().name} · ${D().name} · 웨이브 <b>${S.wave}</b>에서 쓰러졌습니다.<br>정답 ${S.stats.correct}개 · 처치 ${S.stats.kills}마리 · 최고 콤보 ${S.bestCombo}`;
@@ -734,23 +751,53 @@
   function save() {
     if (S.mode !== 'prep') return;
     const data = {
-      v: 3, map: S.map, diff: S.diff, cleared: S.cleared, wave: S.wave, gold: S.gold, gems: S.gems, castleHp: S.castleHp,
+      v: 3, map: S.map, diff: S.diff, lowest: S.lowest, cleared: S.cleared, wave: S.wave, gold: S.gold, gems: S.gems, castleHp: S.castleHp,
       up: S.up, towers: S.towers.map(t => ({ slot: t.slot, type: t.type, lvl: t.lvl, paid: t.paid })),
       cards: S.cards, pendingCards: S.pendingCards, heroGauge: S.heroGauge,
       stats: S.stats, bestCombo: S.bestCombo, savedAt: Date.now(),
     };
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (_) { /* 저장 불가 */ }
+    const all = readSaves();
+    all.maps[S.map] = data;
+    all.last = S.map;
+    writeSaves(all);
   }
-  function loadSave() {
+  function writeSaves(all) {
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(all)); } catch (_) { /* 저장 불가 */ }
+  }
+  function readSaves() {
+    let all = null;
+    try { all = JSON.parse(lsGet(SAVE_KEY)); } catch (_) { all = null; }
+    if (!all || typeof all.maps !== 'object' || !all.maps) all = { last: null, maps: {} };
+    // 예전 버전(저장 칸 1개) → 그 맵의 저장 칸으로 옮기기
+    const old = lsGet(OLD_SAVE_KEY);
+    if (old) {
+      const d = upgradeSave(old);
+      if (d && !all.maps[d.map]) { all.maps[d.map] = d; all.last = all.last || d.map; }
+      writeSaves(all);
+      try { localStorage.removeItem(OLD_SAVE_KEY); } catch (_) { /* 무시 */ }
+    }
+    return all;
+  }
+  // map을 주면 그 맵의 저장, 안 주면 가장 최근에 한 맵의 저장
+  function loadSave(map) {
+    const all = readSaves();
+    const id = map || all.last;
+    return id && all.maps[id] ? upgradeSave(all.maps[id]) : null;
+  }
+  // 저장된 맵 목록 (최근 순)
+  function allSaves() {
+    return MAP_ORDER.map(m => loadSave(m)).filter(Boolean).sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+  }
+  function upgradeSave(raw) {
     try {
-      const d = JSON.parse(lsGet(SAVE_KEY));
+      const d = typeof raw === 'string' ? JSON.parse(raw) : JSON.parse(JSON.stringify(raw));
       if (!d || !(d.wave >= 1)) return null;
       if (d.v === 1) {
         d.gold += (d.towers || []).reduce((s, t) => s + (TOWERS[t.type] ? TOWERS[t.type].cost : 0), 0);
         d.towers = []; d.v = 2;
       }
       if (d.v === 2) { d.map = 'forest'; (d.towers || []).forEach(t => { t.lvl = 1; }); d.cards = []; d.v = 3; }
-      if (d.v === 3) return d;
+      if (d.v === 3) { if (!MAPS[d.map]) d.map = 'forest'; return d; }
     } catch (_) { /* 무시 */ }
     return null;
   }
@@ -760,7 +807,7 @@
   }
   function newGame(diff, map) {
     clearField(true);
-    S.diff = DIFFS[diff] ? diff : 'normal';
+    S.diff = S.lowest = DIFFS[diff] ? diff : 'normal';
     useMap(MAPS[map] ? map : 'forest');
     Object.assign(S, {
       cleared: false, wave: 1, gems: 0, up: emptyUp(), towers: [], cards: [], pendingCards: null,
@@ -776,6 +823,7 @@
   function loadGame(d, fullHp) {
     clearField(true);
     S.diff = DIFFS[d.diff] ? d.diff : 'normal';
+    S.lowest = DIFFS[d.lowest] ? d.lowest : S.diff;
     useMap(MAPS[d.map] ? d.map : 'forest');
     Object.assign(S, {
       cleared: !!d.cleared, wave: d.wave, gold: d.gold, gems: d.gems,
@@ -1020,6 +1068,8 @@
     let html = `${I(MAPD().icon)} ${MAPD().name} · ${I(D().icon)} ${D().name}<br>웨이브 <b>${S.wave}</b>${S.wave > FINAL_WAVE ? ' (무한)' : ` / ${FINAL_WAVE}`} · 문제 <b>${p.dan}</b> · ${p.kinds}`;
     if (S.wave === FINAL_WAVE) html += ` · ${I('crown')} <b>최종 보스: ${p.boss}</b>`;
     else if (p.boss) html += ` · ${I('skull')} <b>보스: ${p.boss}</b>`;
+    const nextMap = MAP_ORDER.find(m => MAPS[m].unlock === S.map);
+    if (nextMap && !Profile.unlocked(nextMap)) html += `<br>${I('lock')} 이 맵에서 10웨이브를 넘기면 <b>${MAPS[nextMap].name}</b> 맵이 열려요`;
     if (S.towers.length === 0) html += '<br>빈 칸(+)을 눌러 탑을 세운 뒤 시작!';
     el.innerHTML = html;
     el.classList.remove('hidden');
@@ -1050,15 +1100,16 @@
   });
 
   function refreshTitle() {
-    const sv = loadSave();
+    const saves = allSaves(), sv = saves[0];
     const btn = $('btnContinue');
     if (sv) {
       btn.classList.remove('hidden');
       const dd = DIFFS[sv.diff] || DIFFS.normal, mm = MAPS[sv.map] || MAPS.forest;
-      $('continueInfo').textContent = `${mm.name} · ${dd.name} · 웨이브 ${sv.wave}`;
+      $('continueInfo').textContent = saves.length > 1 ? `저장된 맵 ${saves.length}개` : `${mm.name} · ${dd.name} · 웨이브 ${sv.wave}`;
     } else btn.classList.add('hidden');
     const stars = MAP_ORDER.reduce((s, m) => s + Profile.bestStars(m), 0);
-    $('bestInfo').innerHTML = `${I('star')} 별 ${stars}/12 · ${I('trophy')} 업적 ${Profile.achCount()}/${ACH.length}`;
+    const open = MAP_ORDER.filter(m => Profile.unlocked(m)).length;
+    $('bestInfo').innerHTML = `${I('map')} 열린 맵 ${open}/4 · ${I('star')} 별 ${stars}/12 · ${I('trophy')} 업적 ${Profile.achCount()}/${ACH.length}`;
     $('achCount').textContent = `${Profile.achCount()}/${ACH.length}`;
   }
   function beginPlay() {
@@ -1082,7 +1133,13 @@
 
   // ---------- 모달 ----------
   let modalOpen = false;
+  let modalOpenedAt = 0;
+  // 창이 막 열린 직후의 터치는 무시 (연타로 원치 않는 버튼이 눌리는 것 방지)
+  $('modal').addEventListener('click', ev => {
+    if (performance.now() - modalOpenedAt < 350) { ev.stopPropagation(); ev.preventDefault(); }
+  }, true);
   function openModal(title, html, opts = {}) {
+    modalOpenedAt = performance.now();
     $('modalTitle').innerHTML = title;
     $('modalBody').innerHTML = html;
     $('modalClose').classList.toggle('hidden', !!opts.noClose);
@@ -1310,12 +1367,15 @@
     x.fillStyle = '#d9493c'; x.beginPath(); x.moveTo(cx - 3, cy); x.lineTo(cx + 8, cy - 12); x.lineTo(cx + 19, cy); x.fill();
   }
   function openMapSelect(diff) {
+    const saved = {};
+    MAP_ORDER.forEach(m => { const d = loadSave(m); if (d && DIFFS[d.diff]) saved[m] = d; });
     const html = `<div class="maps">${MAP_ORDER.map(id => {
       const m = MAPS[id], ok = Profile.unlocked(id), rec = Profile.rec(id, diff);
       return `<button class="mapc ${ok ? '' : 'locked'}" data-map="${id}" ${ok ? '' : 'disabled'}>
         <canvas width="240" height="120" data-prev="${id}"></canvas>
         <div class="info"><b>${I(m.icon)} ${m.name}</b><small>${m.desc}</small>
-          ${starsHtml(Profile.stars(id, diff))}<small>${rec.cleared ? '클리어!' : rec.best ? `최고 웨이브 ${rec.best}` : '도전 전'}</small></div>
+          ${starsHtml(Profile.stars(id, diff))}<small>${rec.cleared ? '클리어!' : rec.best ? `최고 웨이브 ${rec.best}` : '도전 전'}</small>
+          ${ok && saved[id] ? `<span class="saved-tag">${I('play')} 저장됨 · ${DIFFS[saved[id].diff].name} ${saved[id].wave}웨이브</span>` : ''}</div>
         ${ok ? '' : `<div class="lockv">${I('lock')}<b>${m.name}</b>${MAPS[m.unlock].name}에서<br>10웨이브를 넘기면 열려요</div>`}
       </button>`;
     }).join('')}</div>
@@ -1324,11 +1384,75 @@
     mball('canvas[data-prev]').forEach(cv => drawMapPreview(cv, cv.dataset.prev));
     mball('[data-map]').forEach(b => b.onclick = () => {
       if (b.disabled) return;
-      if (loadSave() && !confirm('저장된 게임이 있어요. 새 게임을 시작하면 지워집니다. 계속할까요?')) return;
+      const id = b.dataset.map;
+      if (saved[id]) openSlotChoice(saved[id], diff);
+      else startNew(diff, id);
+    });
+  }
+  function startNew(diff, map) {
+    closeModal();
+    beginPlay();
+    newGame(diff, map);
+    showBanner(`${I(MAPD().icon)} ${MAPD().name} · ${D().name}`, 'good', 1800);
+  }
+  function continueSave(sv) {
+    if (modalOpen) closeModal();
+    beginPlay();
+    loadGame(sv, false);
+    showBanner(`${I('play')} ${MAPD().name} · 웨이브 ${S.wave}부터 이어하기`, 'good', 1800);
+  }
+  function saveLine(sv) {
+    const d = DIFFS[sv.diff] || DIFFS.normal;
+    return `${d.name} · 웨이브 ${sv.wave}${sv.cleared ? ' (무한 모드)' : ''} · 탑 ${(sv.towers || []).length}개`;
+  }
+  // 저장이 있는 맵을 고르면: 이어하기 / 처음부터
+  function openSlotChoice(sv, diff) {
+    const m = MAPS[sv.map];
+    openModal(`${I(m.icon)} ${m.name}`, `<div class="opt-list">
+      <button class="opt evolve" data-slot="cont"><span class="icon">${I('play')}</span>
+        <span class="info"><b>이어하기</b><small>${saveLine(sv)}</small></span></button>
+      <button class="opt" data-slot="new"><span class="icon">${I(DIFFS[diff].icon)}</span>
+        <span class="info"><b>처음부터 (${DIFFS[diff].name})</b><small>이 맵의 저장만 지워져요. 다른 맵 저장은 그대로예요.</small></span></button>
+    </div>`);
+    mb('[data-slot=cont]').onclick = () => continueSave(sv);
+    mb('[data-slot=new]').onclick = () => {
+      if (!confirm(`${m.name}의 저장(웨이브 ${sv.wave})이 지워져요. 처음부터 할까요?`)) return;
+      startNew(diff, sv.map);
+    };
+  }
+  // 처음 화면 '이어하기': 저장이 여러 맵이면 고르기
+  function openContinue() {
+    const saves = allSaves();
+    if (!saves.length) return;
+    if (saves.length === 1) { continueSave(saves[0]); return; }
+    hide('title');
+    openModal(`${I('play')} 이어하기`, `<div class="opt-list">${saves.map(sv => `
+      <button class="opt" data-cont="${sv.map}"><span class="icon">${I(MAPS[sv.map].icon)}</span>
+        <span class="info"><b>${MAPS[sv.map].name}</b><small>${saveLine(sv)}</small></span></button>`).join('')}</div>
+      <p class="stat-line" style="margin-top:10px;font-size:13px;color:#6b7a88">맵마다 따로 저장돼요. 새 맵을 시작해도 다른 맵 저장은 지워지지 않아요.</p>`);
+    mball('[data-cont]').forEach(b => b.onclick = () => continueSave(loadSave(b.dataset.cont)));
+  }
+
+  // 게임 중 난이도 바꾸기 (일시정지 메뉴)
+  function openDiffChange() {
+    openModal(`${I(D().icon)} 난이도 바꾸기`, `<div class="opt-list">${Object.entries(DIFFS).map(([k, d]) => `
+      <button class="opt diff-${k} ${k === S.diff ? 'evolve' : ''}" data-diff="${k}">
+        <span class="icon">${I(d.icon)}</span>
+        <span class="info"><b>${d.name}</b>${k === S.diff ? ' <span class="lv-tag">지금</span>' : ''}<small>${d.desc}</small></span>
+      </button>`).join('')}</div>
+      <p class="stat-line" style="margin-top:10px;font-size:13px;color:#6b7a88">바꾼 난이도는 다음에 나오는 적부터 적용돼요.<br>기록(별)은 이번 판에서 고른 가장 쉬운 난이도로 남아요.</p>`);
+    mball('[data-diff]').forEach(b => b.onclick = () => {
+      const k = b.dataset.diff;
+      if (k !== S.diff) {
+        const ratio = S.castleHp / castleMax();
+        S.diff = k;
+        S.lowest = easier(S.lowest, k);
+        S.castleHp = Math.max(1, Math.round(castleMax() * ratio));
+        save();
+        showBanner(`${I(D().icon)} 난이도: ${D().name}`, 'good', 1600);
+        updatePrepInfo(); updateHud(true);
+      }
       closeModal();
-      beginPlay();
-      newGame(diff, b.dataset.map);
-      showBanner(`${I(MAPD().icon)} ${MAPD().name} · ${D().name}`, 'good', 1800);
     });
   }
 
@@ -1443,7 +1567,8 @@
       <h3>${I('gem')} 보석 &amp; 강화</h3>
       <ul><li>적을 쓰러뜨리면 보석! 성 수리 · 얼음 폭풍 · 유성 낙하에 써요. 골드로는 대장간에서 영구 강화를 해요.</li></ul>
       <h3>${I('map')} 맵 · 난이도 · 별</h3>
-      <ul><li>숲 → 사막 → 설원 → 화산. 앞 맵에서 10웨이브를 넘기면 다음 맵이 열려요.</li>
+      <ul><li>숲 → 사막 → 설원 → 화산. 앞 맵에서 10웨이브를 넘기면 다음 맵이 열려요. 새 맵은 처음 화면 → 새 게임에서 골라요.</li>
+      <li>게임 중에도 일시정지 메뉴에서 난이도를 바꿀 수 있어요.</li>
       <li>별: 10웨이브 ★, 20웨이브 ★★, 클리어 ★★★. 쉬움은 틀리면 건너뛰며 세기 힌트가 나와요.</li></ul>
       <h3>${I('book')} 도감 &amp; 업적</h3>
       <ul><li>만난 적과 세운 탑이 도감에 모이고, 업적을 달성하면 메달을 받아요. (이 기기에만 저장돼요)</li></ul>
@@ -1460,6 +1585,7 @@
         <button class="mini-btn" data-p="ach">${I('trophy')}업적</button>
         <button class="mini-btn" data-p="help">${I('scroll')}방법</button>
       </div>
+      <button class="big-btn alt" data-p="diff">${I(D().icon)} 난이도 바꾸기 <small>지금: ${D().name}</small></button>
       <button class="big-btn alt" data-p="title">${I('home')} 처음 화면으로</button>
       <p class="note">진행 상황은 웨이브 시작 전 상태로 저장돼요.</p>
     </div>`);
@@ -1468,10 +1594,12 @@
     mb('[data-p=ach]').onclick = openAchievements;
     mb('[data-p=help]').onclick = openHelp;
     mb('[data-p=title]').onclick = () => { closeModal(); goTitle(); };
+    mb('[data-p=diff]').onclick = openDiffChange;
   }
 
   // ================= 입력 =================
-  overlay.addEventListener('pointerdown', ev => {
+  // 'click'(손가락을 뗀 뒤)에 창을 열어야, 같은 터치가 새로 뜬 창의 첫 버튼(궁수탑)을 누르지 않음
+  overlay.addEventListener('click', ev => {
     if ((S.mode !== 'prep' && S.mode !== 'wave') || modalOpen) return;
     const rect = overlay.getBoundingClientRect();
     const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
@@ -1529,18 +1657,12 @@
     setTimeout(() => b.classList.remove('pressed'), 90);
   }
   $('btnNew').onclick = () => { Sound.init(); openDifficulty(); };
-  $('btnContinue').onclick = () => {
-    const sv = loadSave();
-    if (!sv) return;
-    beginPlay();
-    loadGame(sv, false);
-    showBanner(`${I('play')} 웨이브 ${S.wave}부터 이어하기`, 'good', 1800);
-  };
+  $('btnContinue').onclick = () => { Sound.init(); openContinue(); };
   $('btnHelp').onclick = openHelp;
   $('btnBook').onclick = () => openBook();
   $('btnAch').onclick = openAchievements;
   $('btnRetry').onclick = () => {
-    const sv = loadSave();
+    const sv = loadSave(S.map);
     beginPlay();
     if (sv) loadGame(sv, true); else newGame(S.diff, S.map);
   };
@@ -1594,5 +1716,5 @@
   if (window.ResizeObserver) new ResizeObserver(() => resize()).observe(wrap);
 
   // 디버그/테스트용
-  window.__game = { S, World, Profile, startWave, newGame, submit, pressDigit, useSkill, useUlt, buildWave, openBuild, openTower, openCards, openBook, openAchievements, openMapSelect, waveClear, spawnEnemy, computeMods };
+  window.__game = { S, World, Profile, openDiffChange, startWave, newGame, submit, pressDigit, useSkill, useUlt, buildWave, openBuild, openTower, openCards, openBook, openAchievements, openMapSelect, waveClear, spawnEnemy, computeMods };
 })();
