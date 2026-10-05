@@ -58,6 +58,8 @@
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     overlay.width = Math.round(w * dpr); overlay.height = Math.round(h * dpr);
     World.resize(w, h);
+    // 처음 화면에서 화면 방향이 바뀌면 성문이 길을 바라보도록 맵을 다시 세움 (게임 중에는 탑 자리가 바뀌지 않게 그대로)
+    if (S && S.mode === 'title' && World.mapId && World.yawMismatch()) { World.loadMap(World.mapId); World.setTitleCam(true); }
   }
   window.addEventListener('resize', () => requestAnimationFrame(resize));
   window.addEventListener('orientationchange', () => setTimeout(resize, 250));
@@ -857,7 +859,8 @@
     return null;
   }
   function useMap(id) {
-    if (World.mapId !== id) World.loadMap(id);
+    // 다른 맵이거나, 화면 방향(가로/세로)이 바뀌어 성문 방향을 다시 맞춰야 하면 새로 불러옴
+    if (World.mapId !== id || World.yawMismatch()) World.loadMap(id);
     S.map = id;
   }
   function newGame(diff, map) {

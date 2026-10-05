@@ -16,11 +16,31 @@ const World = (() => {
 
   const CASTLE = { x: 20.6, z: 0 };
   // 성을 비스듬히 돌려 성문이 카메라 쪽을 보게 함
-  const CASTLE_YAW = 0.55;
-  const GATE_N = { x: -Math.cos(CASTLE_YAW), z: Math.sin(CASTLE_YAW) }; // 성문이 바라보는 방향
+  // 성이 돌아간 각도: 가로 화면은 카메라 쪽으로 비스듬히(성문이 보이게),
+  // 세로 화면은 성문이 길(화면 아래)을 똑바로 바라보게. 맵을 불러올 때 화면 방향에 맞춰 정함
+  const YAW_LAND = 0.55, YAW_PORT = 0;
+  let CASTLE_YAW = YAW_LAND;
+  const GATE_N = { x: 0, z: 0 }; // 성문이 바라보는 방향
   const gateAt = d => ({ x: CASTLE.x - (2.45 + d) * Math.cos(CASTLE_YAW), z: CASTLE.z + (2.45 + d) * Math.sin(CASTLE_YAW) });
-  const GATE = gateAt(0);
-  const gateDir = new T.Vector3(GATE_N.x, 0.62, GATE_N.z).normalize();
+  const GATE = { x: 0, z: 0 };
+  const gateDir = new T.Vector3();
+  let cornersReady = false;
+  function setCastleYaw(y) {
+    CASTLE_YAW = y;
+    GATE_N.x = -Math.cos(y); GATE_N.z = Math.sin(y);
+    Object.assign(GATE, gateAt(0));
+    gateDir.set(GATE_N.x, 0.62, GATE_N.z).normalize();
+    if (cornersReady) buildCorners();
+  }
+  setCastleYaw(YAW_LAND);
+  // 지금 화면이 세로인지 (처음 resize 전에도 캔버스·창 크기로 판단)
+  function isPortraitNow() {
+    const c = renderer && renderer.domElement;
+    const w = (c && c.clientWidth) || window.innerWidth, h = (c && c.clientHeight) || window.innerHeight;
+    return w / h < 0.95;
+  }
+  const wantYaw = () => (isPortraitNow() ? YAW_PORT : YAW_LAND);
+  const yawMismatch = () => wantYaw() !== CASTLE_YAW;
   const BOUNDS = { x0: -21.5, x1: 24.5, z0: -9.6, z1: 9.6 };
 
   // ================= 맵 상태 =================
@@ -86,6 +106,7 @@ const World = (() => {
   function loadMap(id) {
     const M = GD.MAPS[id] || GD.MAPS.forest;
     mapId = id; theme = M.theme;
+    setCastleYaw(wantYaw());
     if (mapGroup) { scene.remove(mapGroup); disposeGroup(mapGroup); }
     mapGroup = new T.Group();
     scene.add(mapGroup);
@@ -1347,12 +1368,17 @@ const World = (() => {
 
   // ================= 카메라 / 화면 =================
   const corners = [];
-  [BOUNDS.x0, BOUNDS.x1].forEach(x => [BOUNDS.z0, BOUNDS.z1].forEach(z => [0, 3].forEach(y => corners.push(new T.Vector3(x, y, z)))));
-  [[-2.6, -3.4, 6], [-2.6, 3.4, 6], [4.3, -4.5, 8], [4.3, 4.5, 8], [1.5, 0, 9.5]].forEach(([lx, lz, y]) => {
-    const c = Math.cos(CASTLE_YAW), sn = Math.sin(CASTLE_YAW);
-    corners.push(new T.Vector3(CASTLE.x + lx * c + lz * sn, y, CASTLE.z - lx * sn + lz * c));
-  });
-  [BOUNDS.x0, BOUNDS.x1].forEach(x => corners.push(new T.Vector3(x, 4.5, BOUNDS.z0)));
+  function buildCorners() {
+    corners.length = 0;
+    [BOUNDS.x0, BOUNDS.x1].forEach(x => [BOUNDS.z0, BOUNDS.z1].forEach(z => [0, 3].forEach(y => corners.push(new T.Vector3(x, y, z)))));
+    [[-2.6, -3.4, 6], [-2.6, 3.4, 6], [4.3, -4.5, 8], [4.3, 4.5, 8], [1.5, 0, 9.5]].forEach(([lx, lz, y]) => {
+      const c = Math.cos(CASTLE_YAW), sn = Math.sin(CASTLE_YAW);
+      corners.push(new T.Vector3(CASTLE.x + lx * c + lz * sn, y, CASTLE.z - lx * sn + lz * c));
+    });
+    [BOUNDS.x0, BOUNDS.x1].forEach(x => corners.push(new T.Vector3(x, 4.5, BOUNDS.z0)));
+  }
+  buildCorners();
+  cornersReady = true;
   const center = new T.Vector3((BOUNDS.x0 + BOUNDS.x1) / 2, 0, (BOUNDS.z0 + BOUNDS.z1) / 2);
 
   function resize(w, h) {
@@ -1453,6 +1479,6 @@ const World = (() => {
     addTower, removeTower, upgradeTower, clearTowers, muzzle,
     addProjectile, removeProjectile, clearProjectiles,
     burst, explosion, ring, pillar, meteor, clearFx,
-    get portrait() { return portrait; },
+    get portrait() { return portrait; }, yawMismatch,
   };
 })();
