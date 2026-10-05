@@ -21,7 +21,7 @@
   const S = {
     mode: 'title', // title | prep | wave | over
     paused: false,
-    diff: 'normal', map: 'forest', cleared: false,
+    diff: 'normal', lowest: 'normal', map: 'forest', cleared: false,
     wave: 1, gold: 0, gems: 0,
     castleHp: 100, castleMax: 100,
     up: emptyUp(),
@@ -37,6 +37,9 @@
     time: 0,
   };
   const D = () => DIFFS[S.diff] || DIFFS.normal;
+  const DIFF_ORDER = ['easy', 'normal', 'hard'];
+  // 기록은 이번 판에서 고른 가장 쉬운 난이도로 남김 (쉬움으로 버티다 어려움으로 바꿔 기록 얻기 방지)
+  const easier = (a, b) => DIFF_ORDER.indexOf(a) <= DIFF_ORDER.indexOf(b) ? a : b;
   const MAPD = () => MAPS[S.map] || MAPS.forest;
 
   // ================= 화면 =================
@@ -697,12 +700,25 @@
     const clearedNow = S.wave === FINAL_WAVE && !S.cleared;
     if (clearedNow) S.cleared = true;
     S.wave++;
-    Profile.record(S.map, S.diff, clearedWave, clearedNow);
+    const unlockedBefore = MAP_ORDER.filter(m => Profile.unlocked(m));
+    Profile.record(S.map, S.lowest, clearedWave, clearedNow);
+    const newMaps = MAP_ORDER.filter(m => Profile.unlocked(m) && !unlockedBefore.includes(m));
     S.pendingCards = genOffer();
     S.ws = null;
     enterPrep();
     if (clearedNow) showClear();
     else showResults({ wave: clearedWave, stars, bonus, ws });
+    newMaps.forEach((m, i) => setTimeout(() => announceMap(m), 600 + i * 900));
+  }
+  // 새 맵이 열렸을 때 크게 알림
+  function announceMap(id) {
+    const m = MAPS[id];
+    const t = document.createElement('div');
+    t.className = 'toast map-toast';
+    t.innerHTML = `<div class="medal" style="background:#ffd23f">${I(m.icon)}</div><div><small>새 맵이 열렸어요!</small><b>${m.name}</b><small class="sub">처음 화면 → 새 게임에서 고를 수 있어요</small></div>`;
+    $('toasts').appendChild(t);
+    Sound.play('achieve');
+    setTimeout(() => t.remove(), 5500);
   }
   function gameOver() {
     if (S.mode === 'over') return;
@@ -710,7 +726,7 @@
     Sound.setMode('prep');
     Sound.play('lose');
     updateControls();
-    Profile.record(S.map, S.diff, S.wave - 1, false);
+    Profile.record(S.map, S.lowest, S.wave - 1, false);
     const sv = loadSave();
     $('retryWave').textContent = sv ? sv.wave : S.wave;
     $('goStats').innerHTML =
@@ -734,7 +750,7 @@
   function save() {
     if (S.mode !== 'prep') return;
     const data = {
-      v: 3, map: S.map, diff: S.diff, cleared: S.cleared, wave: S.wave, gold: S.gold, gems: S.gems, castleHp: S.castleHp,
+      v: 3, map: S.map, diff: S.diff, lowest: S.lowest, cleared: S.cleared, wave: S.wave, gold: S.gold, gems: S.gems, castleHp: S.castleHp,
       up: S.up, towers: S.towers.map(t => ({ slot: t.slot, type: t.type, lvl: t.lvl, paid: t.paid })),
       cards: S.cards, pendingCards: S.pendingCards, heroGauge: S.heroGauge,
       stats: S.stats, bestCombo: S.bestCombo, savedAt: Date.now(),
@@ -760,7 +776,7 @@
   }
   function newGame(diff, map) {
     clearField(true);
-    S.diff = DIFFS[diff] ? diff : 'normal';
+    S.diff = S.lowest = DIFFS[diff] ? diff : 'normal';
     useMap(MAPS[map] ? map : 'forest');
     Object.assign(S, {
       cleared: false, wave: 1, gems: 0, up: emptyUp(), towers: [], cards: [], pendingCards: null,
@@ -776,6 +792,7 @@
   function loadGame(d, fullHp) {
     clearField(true);
     S.diff = DIFFS[d.diff] ? d.diff : 'normal';
+    S.lowest = DIFFS[d.lowest] ? d.lowest : S.diff;
     useMap(MAPS[d.map] ? d.map : 'forest');
     Object.assign(S, {
       cleared: !!d.cleared, wave: d.wave, gold: d.gold, gems: d.gems,
@@ -1020,6 +1037,8 @@
     let html = `${I(MAPD().icon)} ${MAPD().name} · ${I(D().icon)} ${D().name}<br>웨이브 <b>${S.wave}</b>${S.wave > FINAL_WAVE ? ' (무한)' : ` / ${FINAL_WAVE}`} · 문제 <b>${p.dan}</b> · ${p.kinds}`;
     if (S.wave === FINAL_WAVE) html += ` · ${I('crown')} <b>최종 보스: ${p.boss}</b>`;
     else if (p.boss) html += ` · ${I('skull')} <b>보스: ${p.boss}</b>`;
+    const nextMap = MAP_ORDER.find(m => MAPS[m].unlock === S.map);
+    if (nextMap && !Profile.unlocked(nextMap)) html += `<br>${I('lock')} 이 맵에서 10웨이브를 넘기면 <b>${MAPS[nextMap].name}</b> 맵이 열려요`;
     if (S.towers.length === 0) html += '<br>빈 칸(+)을 눌러 탑을 세운 뒤 시작!';
     el.innerHTML = html;
     el.classList.remove('hidden');
@@ -1058,7 +1077,8 @@
       $('continueInfo').textContent = `${mm.name} · ${dd.name} · 웨이브 ${sv.wave}`;
     } else btn.classList.add('hidden');
     const stars = MAP_ORDER.reduce((s, m) => s + Profile.bestStars(m), 0);
-    $('bestInfo').innerHTML = `${I('star')} 별 ${stars}/12 · ${I('trophy')} 업적 ${Profile.achCount()}/${ACH.length}`;
+    const open = MAP_ORDER.filter(m => Profile.unlocked(m)).length;
+    $('bestInfo').innerHTML = `${I('map')} 열린 맵 ${open}/4 · ${I('star')} 별 ${stars}/12 · ${I('trophy')} 업적 ${Profile.achCount()}/${ACH.length}`;
     $('achCount').textContent = `${Profile.achCount()}/${ACH.length}`;
   }
   function beginPlay() {
@@ -1082,7 +1102,13 @@
 
   // ---------- 모달 ----------
   let modalOpen = false;
+  let modalOpenedAt = 0;
+  // 창이 막 열린 직후의 터치는 무시 (연타로 원치 않는 버튼이 눌리는 것 방지)
+  $('modal').addEventListener('click', ev => {
+    if (performance.now() - modalOpenedAt < 350) { ev.stopPropagation(); ev.preventDefault(); }
+  }, true);
   function openModal(title, html, opts = {}) {
+    modalOpenedAt = performance.now();
     $('modalTitle').innerHTML = title;
     $('modalBody').innerHTML = html;
     $('modalClose').classList.toggle('hidden', !!opts.noClose);
@@ -1332,6 +1358,29 @@
     });
   }
 
+  // 게임 중 난이도 바꾸기 (일시정지 메뉴)
+  function openDiffChange() {
+    openModal(`${I(D().icon)} 난이도 바꾸기`, `<div class="opt-list">${Object.entries(DIFFS).map(([k, d]) => `
+      <button class="opt diff-${k} ${k === S.diff ? 'evolve' : ''}" data-diff="${k}">
+        <span class="icon">${I(d.icon)}</span>
+        <span class="info"><b>${d.name}</b>${k === S.diff ? ' <span class="lv-tag">지금</span>' : ''}<small>${d.desc}</small></span>
+      </button>`).join('')}</div>
+      <p class="stat-line" style="margin-top:10px;font-size:13px;color:#6b7a88">바꾼 난이도는 다음에 나오는 적부터 적용돼요.<br>기록(별)은 이번 판에서 고른 가장 쉬운 난이도로 남아요.</p>`);
+    mball('[data-diff]').forEach(b => b.onclick = () => {
+      const k = b.dataset.diff;
+      if (k !== S.diff) {
+        const ratio = S.castleHp / castleMax();
+        S.diff = k;
+        S.lowest = easier(S.lowest, k);
+        S.castleHp = Math.max(1, Math.round(castleMax() * ratio));
+        save();
+        showBanner(`${I(D().icon)} 난이도: ${D().name}`, 'good', 1600);
+        updatePrepInfo(); updateHud(true);
+      }
+      closeModal();
+    });
+  }
+
   // 도감
   const DEX_ENEMIES = ['soldier', 'goblin', 'knight', 'ogre', 'troll', 'orcking', 'dragon', 'lich', 'demonking'];
   function speedWord(s) { return s >= 1.3 ? '매우 빠름' : s >= 0.95 ? '보통' : s >= 0.6 ? '느림' : '매우 느림'; }
@@ -1443,7 +1492,8 @@
       <h3>${I('gem')} 보석 &amp; 강화</h3>
       <ul><li>적을 쓰러뜨리면 보석! 성 수리 · 얼음 폭풍 · 유성 낙하에 써요. 골드로는 대장간에서 영구 강화를 해요.</li></ul>
       <h3>${I('map')} 맵 · 난이도 · 별</h3>
-      <ul><li>숲 → 사막 → 설원 → 화산. 앞 맵에서 10웨이브를 넘기면 다음 맵이 열려요.</li>
+      <ul><li>숲 → 사막 → 설원 → 화산. 앞 맵에서 10웨이브를 넘기면 다음 맵이 열려요. 새 맵은 처음 화면 → 새 게임에서 골라요.</li>
+      <li>게임 중에도 일시정지 메뉴에서 난이도를 바꿀 수 있어요.</li>
       <li>별: 10웨이브 ★, 20웨이브 ★★, 클리어 ★★★. 쉬움은 틀리면 건너뛰며 세기 힌트가 나와요.</li></ul>
       <h3>${I('book')} 도감 &amp; 업적</h3>
       <ul><li>만난 적과 세운 탑이 도감에 모이고, 업적을 달성하면 메달을 받아요. (이 기기에만 저장돼요)</li></ul>
@@ -1460,6 +1510,7 @@
         <button class="mini-btn" data-p="ach">${I('trophy')}업적</button>
         <button class="mini-btn" data-p="help">${I('scroll')}방법</button>
       </div>
+      <button class="big-btn alt" data-p="diff">${I(D().icon)} 난이도 바꾸기 <small>지금: ${D().name}</small></button>
       <button class="big-btn alt" data-p="title">${I('home')} 처음 화면으로</button>
       <p class="note">진행 상황은 웨이브 시작 전 상태로 저장돼요.</p>
     </div>`);
@@ -1468,10 +1519,12 @@
     mb('[data-p=ach]').onclick = openAchievements;
     mb('[data-p=help]').onclick = openHelp;
     mb('[data-p=title]').onclick = () => { closeModal(); goTitle(); };
+    mb('[data-p=diff]').onclick = openDiffChange;
   }
 
   // ================= 입력 =================
-  overlay.addEventListener('pointerdown', ev => {
+  // 'click'(손가락을 뗀 뒤)에 창을 열어야, 같은 터치가 새로 뜬 창의 첫 버튼(궁수탑)을 누르지 않음
+  overlay.addEventListener('click', ev => {
     if ((S.mode !== 'prep' && S.mode !== 'wave') || modalOpen) return;
     const rect = overlay.getBoundingClientRect();
     const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
@@ -1594,5 +1647,5 @@
   if (window.ResizeObserver) new ResizeObserver(() => resize()).observe(wrap);
 
   // 디버그/테스트용
-  window.__game = { S, World, Profile, startWave, newGame, submit, pressDigit, useSkill, useUlt, buildWave, openBuild, openTower, openCards, openBook, openAchievements, openMapSelect, waveClear, spawnEnemy, computeMods };
+  window.__game = { S, World, Profile, openDiffChange, startWave, newGame, submit, pressDigit, useSkill, useUlt, buildWave, openBuild, openTower, openCards, openBook, openAchievements, openMapSelect, waveClear, spawnEnemy, computeMods };
 })();
