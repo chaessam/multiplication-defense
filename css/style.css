@@ -389,13 +389,13 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
   background: conic-gradient(#ffd23f calc(var(--g) * 1turn), rgba(10,20,30,.55) 0);
   -webkit-mask: radial-gradient(circle, transparent 58%, #000 60%); mask: radial-gradient(circle, transparent 58%, #000 60%);
 }
-#heroBtn .face .ic { width: 46px; height: 46px; }
+#heroBtn .face .ic { width: 54px; height: 54px; }
 #heroBtn .lbl {
   position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%);
   padding: 1px 8px; border-radius: 8px; font-size: 12px; white-space: nowrap;
   background: #0e1f2c; color: #9fb4c6;
 }
-#heroBtn.ready { animation: heroPulse .9s infinite; background: radial-gradient(circle at 50% 35%, #ffe680, #e2a21a); }
+#heroBtn.ready { animation: heroPulse .9s infinite; background: radial-gradient(circle at 50% 35%, #ffd27a, #e2561a); }
 #heroBtn.ready .lbl { background: var(--red); color: #fff; }
 @keyframes heroPulse { 50% { transform: scale(1.08); box-shadow: 0 4px 0 #0e1f2c, 0 0 0 8px rgba(255,210,63,.45); } }
 #heroBtn:active { transform: translateY(2px); }
@@ -564,11 +564,11 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
   .rcard .rar { position: absolute; top: -10px; left: 12px; margin: 0; }
   .rcard .txt { flex: 1; }
   #heroBtn { width: 62px; height: 62px; right: 8px; bottom: 8px; }
-  #heroBtn .face .ic { width: 38px; height: 38px; }
+  #heroBtn .face .ic { width: 45px; height: 45px; }
 }
 @media (orientation: landscape) and (max-height: 620px) {
   #heroBtn { width: 58px; height: 58px; }
-  #heroBtn .face .ic { width: 36px; height: 36px; }
+  #heroBtn .face .ic { width: 43px; height: 43px; }
 }
 
 /* 좁은 휴대폰: 상단 바 압축 */

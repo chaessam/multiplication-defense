@@ -76,6 +76,7 @@ const World = (() => {
     sun.shadow.normalBias = 0.03;
     scene.add(sun, sun.target);
     particles = makeParticles(900);
+    scene.add(fireLight);
     envGroup = new T.Group();
     scene.add(envGroup);
     buildClouds();
@@ -492,7 +493,10 @@ const World = (() => {
   function heroShoot(x, z) { heroAim(x, z); hero.shootT = 0.25; }
   function heroCast(x, z) { heroAim(x, z); hero.castT = 0.4; }
   function heroUlt() { hero.ultT = hero.ultDur; }
+  const mv = new T.Vector3();
   function heroMuzzle() {
+    const u = heroObj && heroObj.userData.model.userData;
+    if (u && u.nock) { u.nock.children[1].getWorldPosition(mv); return { x: mv.x, y: mv.y, z: mv.z }; }
     return { x: heroSpot.x + Math.cos(hero.aim) * 1.1, y: 3.2, z: heroSpot.z - Math.sin(hero.aim) * 1.1 };
   }
   function syncHero(dt, time, gauge) {
@@ -523,6 +527,11 @@ const World = (() => {
     m.position.y = y;
     m.rotation.y = hero.aim + spin;
     if (u.cape) u.cape.rotation.z = -0.15 - Math.sin(time * 3) * 0.06;
+    if (u.nock) {
+      // 시위에 건 불화살: 쏜 직후 잠깐 비었다가 다시 걸림, 촉에서 불꽃이 피어오름
+      u.nock.visible = hero.shootT <= 0.05;
+      if (u.nock.visible && Math.random() < dt * 14) { const m = heroMuzzle(); flame(m.x, m.y, m.z, { vx: rs(0.2), vy: 0.8, vz: rs(0.2), life: 0.35, size: 0.32, grow: -0.2 }); }
+    }
     const hu = heroObj.userData;
     hu.rune.rotation.y = time * 0.8;
     hu.rune.children[0].material.opacity = 0.35 + gauge * 0.35;
@@ -778,7 +787,183 @@ const World = (() => {
       if (f.life <= 0 && ((f.kind !== 'meteor' && f.kind !== 'blade') || f.hit)) { scene.remove(f.o); fx.splice(i, 1); }
     }
   }
-  function clearFx() { fx.forEach(f => scene.remove(f.o)); fx.length = 0; }
+  function clearFx() {
+    fx.forEach(f => scene.remove(f.o)); fx.length = 0;
+    fireArrows.forEach(a => scene.remove(a.g)); fireArrows.length = 0;
+    flames.forEach(f => { scene.remove(f.s); flamePool.push(f); }); flames.length = 0;
+  }
+
+  // ================= 영웅의 불화살 =================
+  // 불꽃·연기 스프라이트 (부드러운 원형 텍스처)
+  function softTex(stops) {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const x = c.getContext('2d'), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    stops.forEach(([o, col]) => gr.addColorStop(o, col));
+    x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
+    const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; return t;
+  }
+  const FIRE_TEX = softTex([[0, 'rgba(255,255,255,1)'], [0.45, 'rgba(255,255,255,0.85)'], [0.75, 'rgba(255,255,255,0.3)'], [1, 'rgba(255,255,255,0)']]);
+  const SMOKE_TEX = softTex([[0, 'rgba(255,255,255,0.7)'], [0.6, 'rgba(255,255,255,0.25)'], [1, 'rgba(255,255,255,0)']]);
+  const FIRE_COLS = ['#ffe27a', '#ffa21f', '#ff5512', '#b8200c', '#4a1408'];
+  const SMOKE_COLS = ['#6a5a52', '#3a3230'];
+  const flames = [], flamePool = [];
+  const MAX_FLAMES = 320;
+  function flame(x, y, z, o = {}) {
+    let f = flamePool.pop();
+    if (!f) {
+      if (flames.length >= MAX_FLAMES) return;
+      f = { s: new T.Sprite(new T.SpriteMaterial({ map: FIRE_TEX, transparent: true, depthWrite: false })) };
+    }
+    const m = f.s.material;
+    m.map = o.smoke ? SMOKE_TEX : FIRE_TEX;
+    m.blending = o.add ? T.AdditiveBlending : T.NormalBlending;
+    m.needsUpdate = true;
+    f.s.position.set(x, y, z);
+    f.vx = o.vx || 0; f.vy = o.vy || 0; f.vz = o.vz || 0;
+    f.life = f.max = o.life || 0.5;
+    f.size = o.size || 0.5; f.grow = o.grow ?? 0.4; f.grav = o.grav || 0;
+    f.cols = o.cols || (o.smoke ? SMOKE_COLS : FIRE_COLS); f.smoke = !!o.smoke;
+    m.color.set(f.cols[0]); m.opacity = 1;
+    f.s.scale.setScalar(f.size);
+    scene.add(f.s); flames.push(f);
+  }
+  const fc1 = new T.Color(), fc2 = new T.Color();
+  function updateFlames(dt) {
+    for (let i = flames.length - 1; i >= 0; i--) {
+      const f = flames[i];
+      f.life -= dt;
+      if (f.life <= 0) { scene.remove(f.s); flames.splice(i, 1); flamePool.push(f); continue; }
+      f.vy -= f.grav * dt;
+      f.s.position.x += f.vx * dt; f.s.position.y += f.vy * dt; f.s.position.z += f.vz * dt;
+      const k = 1 - f.life / f.max, q = k * (f.cols.length - 1), a = Math.floor(q);
+      fc1.set(f.cols[a]); fc2.set(f.cols[Math.min(a + 1, f.cols.length - 1)]);
+      f.s.material.color.copy(fc1.lerp(fc2, q - a));
+      f.s.material.opacity = f.smoke ? 0.45 * (1 - k) : Math.min(1, (1 - k) * 1.6);
+      f.s.scale.setScalar(Math.max(0.01, f.size * (1 + f.grow * k * 3)));
+    }
+  }
+  const rs = (a = 1) => (Math.random() - 0.5) * 2 * a;
+  function fireBurst(x, y, z, n, power, size = 0.4) {
+    for (let i = 0; i < n; i++) {
+      const v = new T.Vector3(rs(), Math.random() * 0.9 + 0.2, rs()).normalize().multiplyScalar(power * (0.4 + Math.random() * 0.8));
+      flame(x, y, z, { vx: v.x, vy: v.y, vz: v.z, life: 0.35 + Math.random() * 0.45, size, grow: -0.15, grav: 9 });
+    }
+  }
+  const fireLight = new T.PointLight('#ff8a2a', 0, 16, 1.6);
+  let fireLightT = 0, fireLightMax = 0;
+
+  // 불화살 모델: 나무 화살대, 쇠 화살촉, 불붙은 천 뭉치, 깃 3장, 불꽃 두 겹
+  function fireArrowMesh(big) {
+    const g = new T.Group();
+    const s = big ? 2.0 : 1.4;
+    g.add(part(G.box, mat('#8d5b34'), 1.1 * s, 0.055 * s, 0.055 * s, -0.45 * s, 0, 0));
+    const head = part(G.oct, mat('#c9ced6', { metalness: 0.6, roughness: 0.3 }), 0.2 * s, 0.07 * s, 0.07 * s, 0.2 * s, 0, 0); g.add(head);
+    g.add(part(G.box, glow('#ff6a12', 1.4), 0.16 * s, 0.12 * s, 0.12 * s, 0.02 * s, 0, 0));
+    g.add(part(G.box, glow('#ffb030', 1.2), 0.09 * s, 0.14 * s, 0.14 * s, 0.06 * s, 0, 0));
+    for (let i = 0; i < 3; i++) {
+      const v = part(G.box, mat(i ? '#e5483b' : '#f6eedb'), 0.26 * s, 0.015, 0.13 * s, -0.92 * s, 0, 0);
+      const pivot = new T.Group(); pivot.rotation.x = i * Math.PI * 2 / 3; pivot.add(v); v.position.z = 0.06 * s; g.add(pivot);
+    }
+    const outer = new T.Sprite(new T.SpriteMaterial({ map: FIRE_TEX, color: '#ff7a1a', transparent: true, depthWrite: false }));
+    outer.scale.setScalar(big ? 2.4 : 1.25); outer.position.x = 0.05 * s; g.add(outer);
+    const inner = new T.Sprite(new T.SpriteMaterial({ map: FIRE_TEX, color: '#fff0a0', transparent: true, depthWrite: false, blending: T.AdditiveBlending }));
+    inner.scale.setScalar(big ? 1.1 : 0.55); inner.position.x = 0.1 * s; g.add(inner);
+    g.userData = { outer, inner, base: big ? 2.4 : 1.25 };
+    if (big) {
+      // 불사조: 불꽃 날개와 꼬리깃
+      const wingGeo = new T.BufferGeometry();
+      wingGeo.setAttribute('position', new T.Float32BufferAttribute([0, 0, 0, -1.6, 0, 0, -0.6, 0, 1.9, 0, 0, 0, -0.6, 0, 1.9, 0.4, 0, 1.2], 3));
+      const wm = new T.MeshBasicMaterial({ color: '#ff7a1a', transparent: true, opacity: 0.9, side: T.DoubleSide, depthWrite: false });
+      const wm2 = new T.MeshBasicMaterial({ color: '#ffd23f', transparent: true, opacity: 0.9, side: T.DoubleSide, depthWrite: false });
+      g.userData.wings = [-1, 1].map(sd => {
+        const w = new T.Group(); w.scale.z = sd; w.position.x = -0.3; g.add(w);
+        w.add(new T.Mesh(wingGeo, wm));
+        const w2 = new T.Mesh(wingGeo, wm2); w2.scale.set(0.6, 1, 0.6); w2.position.y = 0.02; w.add(w2);
+        return w;
+      });
+      [-0.25, 0, 0.25].forEach(z => g.add(part(G.cone4, glow('#ff5512', 1.2), 0.08, 0.9, 0.08, -2.3, 0, z).rotateZ(Math.PI / 2)));
+    }
+    return g;
+  }
+  const fireArrows = [];
+  const AX = new T.Vector3(1, 0, 0);
+  function arrowTarget(a) {
+    const e = a.e;
+    if (enemyObjs.has(e)) a.last.set(e.x, enemyCenterY(e), e.z);
+    return a.last;
+  }
+  // tier: 'arrow' 한 발 / 'volley' 세 발 / 'phoenix' 불사조. 마지막 화살이 꽂힐 때 onHit(위치)
+  function fireArrow(e, tier, onHit) {
+    const n = tier === 'volley' ? 3 : 1;
+    for (let i = 0; i < n; i++) {
+      const from = heroMuzzle();
+      const a = {
+        e, g: fireArrowMesh(tier === 'phoenix'), big: tier === 'phoenix',
+        from: new T.Vector3(from.x, from.y, from.z), prev: new T.Vector3(from.x, from.y, from.z), last: new T.Vector3(e.x, enemyCenterY(e), e.z),
+        side: n > 1 ? (i - 1) : 0, arc: 1 + i * 0.12, t: -i * 0.09, onHit: i === n - 1 ? onHit : null,
+      };
+      const d = a.from.distanceTo(a.last);
+      a.dur = (0.2 + d * 0.011) * (a.big ? 1.3 : 1);
+      a.g.visible = a.t >= 0;
+      a.g.position.copy(a.from);
+      scene.add(a.g);
+      fireArrows.push(a);
+    }
+  }
+  const ap = new T.Vector3(), adir = new T.Vector3(), aside = new T.Vector3();
+  function updateFireArrows(dt, time) {
+    for (let i = fireArrows.length - 1; i >= 0; i--) {
+      const a = fireArrows[i];
+      a.t += dt / a.dur;
+      if (a.t < 0) continue;
+      if (!a.g.visible) {
+        // 3연발: 발사 순간 영웅 위치에서 출발
+        const m = heroMuzzle(); a.from.set(m.x, m.y, m.z); a.prev.copy(a.from); a.g.visible = true;
+      }
+      const to = arrowTarget(a);
+      const k = Math.min(1, a.t);
+      ap.copy(a.from).lerp(to, k);
+      const dist = a.from.distanceTo(to);
+      ap.y += Math.sin(k * Math.PI) * (1.2 + dist * 0.07) * a.arc;
+      if (a.side) {
+        aside.set(-(to.z - a.from.z), 0, to.x - a.from.x).normalize();
+        ap.addScaledVector(aside, Math.sin(k * Math.PI) * 1.3 * a.side);
+      }
+      adir.copy(ap).sub(a.prev);
+      if (adir.lengthSq() > 1e-6) a.g.quaternion.setFromUnitVectors(AX, adir.normalize());
+      a.g.position.copy(ap);
+      const u = a.g.userData;
+      u.outer.scale.setScalar(u.base * (0.9 + Math.sin(time * 40 + i) * 0.12));
+      if (u.wings) u.wings.forEach(w => { w.rotation.x = Math.sin(time * 18) * 0.5 * w.scale.z; });
+      // 불꽃 꼬리 + 연기
+      const n = a.big ? 6 : 3;
+      for (let j = 0; j < n; j++) {
+        const q = j / n;
+        flame(a.prev.x + (ap.x - a.prev.x) * q, a.prev.y + (ap.y - a.prev.y) * q, a.prev.z + (ap.z - a.prev.z) * q,
+          { vx: rs(0.4), vy: 0.6 + Math.random() * 0.6, vz: rs(0.4), life: 0.22 + Math.random() * 0.22, size: (a.big ? 0.9 : 0.45) * (0.7 + Math.random() * 0.6), grow: -0.2 });
+      }
+      if (Math.random() < (a.big ? 0.8 : 0.3)) flame(ap.x, ap.y, ap.z, { vx: rs(0.3), vy: 0.9, vz: rs(0.3), life: 0.7, size: a.big ? 0.8 : 0.5, grow: 0.5, smoke: true });
+      a.prev.copy(ap);
+      if (a.t >= 1) {
+        scene.remove(a.g);
+        fireArrows.splice(i, 1);
+        fireImpact(to.x, to.y, to.z, a.big, !a.onHit);
+        if (a.onHit) a.onHit({ x: to.x, y: to.y, z: to.z });
+      }
+    }
+    fireLightT = Math.max(0, fireLightT - dt);
+    fireLight.intensity = fireLightT > 0 ? fireLightMax * fireLightT / 0.3 : 0;
+  }
+  function fireImpact(x, y, z, big, small) {
+    fireBurst(x, y, z, big ? 60 : small ? 12 : 28, big ? 9 : 6.5, big ? 0.55 : 0.4);
+    flame(x, y, z, { life: 0.3, size: big ? 3.4 : small ? 1.0 : 1.7, grow: 0.5, cols: ['#ffe9a0', '#ff9a2a', '#ff4a12'] });
+    flame(x, y, z, { life: 0.14, size: big ? 2.2 : 1.1, grow: 0.8, add: true, cols: ['#ffffff', '#ffd27a'] });
+    for (let i = 0; i < (big ? 8 : small ? 1 : 4); i++) flame(x + rs(0.5), y, z + rs(0.5), { vx: rs(0.6), vy: 1.2, vz: rs(0.6), life: 1.0, size: big ? 1.3 : 0.8, grow: 0.6, smoke: true });
+    if (!small) ring(x, z, big ? 6 : 2.6, big ? '#ff8a1a' : '#ff6a12', big ? 0.6 : 0.45);
+    burst(x, y, z, big ? 16 : 6, ['#ffd23f', '#ff7a1a', '#3a2a22'], big ? 1.4 : 0.9);
+    fireLight.position.set(x, y + 1, z);
+    fireLightT = big ? 0.35 : 0.22; fireLightMax = big ? 70 : 30;
+  }
 
   // ================= 환경: 낮/노을/밤, 구름, 새, 날씨 =================
   const TIMES = {
@@ -1106,6 +1291,8 @@ const World = (() => {
     stepGate(realDt);
     updateParticles(dt, time);
     updateFx(dt);
+    updateFireArrows(dt, time);
+    updateFlames(dt);
     stepCamera(realDt);
   }
 
@@ -1206,7 +1393,7 @@ const World = (() => {
     init, loadMap, resize, render, sync, project, pickSlot, pickHero, setTime, focusOn, focusing, portraitOf,
     get slots() { return slots; }, get pathLength() { return pathLength; }, get mapId() { return mapId; }, get night() { return env.night; },
     pathAt, CASTLE, castleTop, heroSpot, GATE, setGate, gateHit, gateShot, setTitleCam,
-    heroShoot, heroCast, heroUlt, heroMuzzle,
+    heroShoot, heroCast, heroUlt, heroMuzzle, fireArrow,
     addEnemy, removeEnemy, clearEnemies, enemyHeadY, enemyCenterY,
     addTower, removeTower, upgradeTower, clearTowers, muzzle,
     addProjectile, removeProjectile, clearProjectiles,

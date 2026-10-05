@@ -477,7 +477,9 @@
       if (e.exhausted) k *= e.def.boss ? 0.65 : 0.45;
       let sp = e.speed * Math.max(D().minSpd, k); // 탑만으로 영원히 붙잡아 둘 수는 없음
       if (e.frozen > 0 || e.stun > 0) sp = 0;
+      if (e.doomed) sp *= 0.3; // 불화살이 날아가는 중: 움찔하며 멈칫
       e.t += sp * dt / World.pathLength;
+      if (e.doomed) e.t = Math.min(e.t, 0.995);
       setEnemyPos(e);
       e.phase += sp * dt * 3.2 / Math.max(0.8, e.def.size);
       if (e.t >= 1) { e.dead = true; World.removeEnemy(e); hitCastle(e); }
@@ -516,7 +518,7 @@
 
   // ================= 정답 입력 =================
   const answerEl = $('answer'), answerBox = $('answerBox'), comboEl = $('combo');
-  function targetable() { return S.enemies.filter(e => !e.dead && e.t > 0.01); }
+  function targetable() { return S.enemies.filter(e => !e.dead && !e.doomed && e.t > 0.01); }
   function pressDigit(d) {
     if (S.mode !== 'wave' || S.paused) return;
     const maxLen = D().big ? 3 : 2;
@@ -558,32 +560,49 @@
     if (S.ws) S.ws.gold += gold;
     const c = enemyCenter(e);
     floater(c.x, World.enemyHeadY(e) + 0.4, c.z, finisher > 1 ? `막타 +${gold}` : `+${gold}`, '#ffd34a', 24, 'coin');
-    // 영웅이 석궁으로 번개를 쏨
-    World.heroCast(e.x, e.z);
-    lightningBolt(World.heroMuzzle(), c);
-    World.burst(c.x, c.y, c.z, 14, ['#fff7b0', '#ffe14a', '#9fe6ff'], 1);
-    World.ring(e.x, e.z, 1.6, '#ffe14a');
+    // 영웅이 장궁으로 불화살을 쏨: 콤보 1~4 불화살, 5~9 3연발, 10부터 불사조 화살
+    const tier = S.combo >= 10 ? 'phoenix' : S.combo >= 5 ? 'volley' : 'arrow';
+    World.heroShoot(e.x, e.z);
     Sound.play('correct', S.combo);
+    Sound.play('fireShot', tier);
     flashBox('right');
     addGauge(0.12 * (1 + 0.05 * S.up.hero) * (1 + MOD.heroCharge));
-    if (e.def.probs <= 1 || e.probsLeft <= 1) {
-      e.hp = 0; kill(e);
-      S.hitStop = Math.max(S.hitStop, 0.05);
-    } else {
+    const lethal = e.def.probs <= 1 || e.probsLeft <= 1;
+    if (lethal) e.doomed = true; // 화살이 꽂힐 때까지 다른 답의 대상이 되지 않음
+    else {
       const per = e.maxHp / e.def.probs;
       e.probsLeft--;
       e.hp = Math.min(e.hp, e.probsLeft * per);
       e.exhausted = false;
-      e.hitT = 0.2;
       e.q = makeProblem(e.def.boss);
       e.hint = false;
-      knock(e, e.def.boss ? 0.4 : 1.0, true);
-      S.shake = Math.max(S.shake, e.def.boss ? 6 : 3);
-      S.hitStop = Math.max(S.hitStop, e.def.boss ? 0.1 : 0.06);
     }
+    World.fireArrow(e, tier, pos => {
+      Sound.play('fireHit', tier);
+      if (tier === 'phoenix') {
+        S.shake = Math.max(S.shake, 7);
+        // 불사조의 불길: 주변 적을 지치게 만듦 (마지막 한 방은 여전히 정답만)
+        S.enemies.forEach(o => {
+          if (o === e || o.dead || Math.hypot(o.x - pos.x, o.z - pos.z) > 4.2) return;
+          damage(o, o.maxHp * (o.def.boss ? 0.06 : 0.4));
+          o.burnT = Math.max(o.burnT, 1.5); o.burnDps = Math.max(o.burnDps, o.maxHp * 0.05);
+        });
+      }
+      if (e.dead) return;
+      if (lethal) {
+        e.hp = 0; kill(e);
+        S.hitStop = Math.max(S.hitStop, 0.05);
+      } else {
+        e.hitT = 0.2;
+        knock(e, e.def.boss ? 0.4 : 1.0, true);
+        S.shake = Math.max(S.shake, e.def.boss ? 6 : 3);
+        S.hitStop = Math.max(S.hitStop, e.def.boss ? 0.1 : 0.06);
+      }
+      S.enemies = S.enemies.filter(x => !x.dead);
+    });
     // 연쇄 번개 카드
     if (MOD.chain && Math.random() < MOD.chain) {
-      const other = S.enemies.filter(x => x !== e && !x.dead && x.t > 0.01).sort((a, b) => Math.hypot(a.x - e.x, a.z - e.z) - Math.hypot(b.x - e.x, b.z - e.z))[0];
+      const other = S.enemies.filter(x => x !== e && !x.dead && !x.doomed && x.t > 0.01).sort((a, b) => Math.hypot(a.x - e.x, a.z - e.z) - Math.hypot(b.x - e.x, b.z - e.z))[0];
       if (other && Math.hypot(other.x - e.x, other.z - e.z) < 7) {
         lightningBolt(c, enemyCenter(other));
         damage(other, other.maxHp * (other.def.boss ? 0.08 : 0.5), { lethal: !other.def.boss });
@@ -906,7 +925,7 @@
       c.shadowBlur = 0; c.strokeStyle = '#ffffff'; c.lineWidth = 3; c.stroke();
       c.restore();
     }
-    const list = S.enemies.filter(e => !e.dead && e.t > 0.004).sort((a, b) => a.t - b.t);
+    const list = S.enemies.filter(e => !e.dead && !e.doomed && e.t > 0.004).sort((a, b) => a.t - b.t);
     const lead = list[list.length - 1];
     c.font = LABEL_FONT;
     const placed = [], items = [];
@@ -1541,7 +1560,7 @@
     } else {
       html += `<img src="${World.portraitOf('hero', 'hero')}" alt="">
         <div><h3>${HERO.name}</h3><p>${HERO.lore}</p><div class="dex-stats">
-          <span>기본 공격</span><b>황금 석궁 (피해 ${HERO.dmg})</b>
+          <span>기본 공격</span><b>불화살 장궁 (피해 ${HERO.dmg})</b>
           <span>필살기</span><b>용사의 심판 — 모든 적에게 황금 검을 내리꽂고 잠시 기절시켜요</b>
           <span>게이지</span><b>정답 1개에 12%씩 충전</b>
           <span>필살기 사용</span><b>${P.ults}회</b>
@@ -1576,7 +1595,8 @@
       <ul><li>적은 모두 <b>구구단 방패</b>를 들고 있어요. 탑·스킬은 적을 <b>지치게(느리게)</b> 만들 뿐, 마지막 한 방은 <b>구구단 정답</b>으로만 쓰러뜨릴 수 있어요!</li>
       <li>지친 적에는 주황색 <b>막타!</b> 표시가 떠요. 이때 맞히면 골드 1.5배!</li></ul>
       <h3>${I('hero')} 구구단 + 영웅</h3>
-      <ul><li>적 머리 위 문제(예: <b>7 × 8</b>)의 답을 입력하면 영웅이 번개를 쏴서 적을 쓰러뜨리고 <b>골드</b>를 얻어요.</li>
+      <ul><li>적 머리 위 문제(예: <b>7 × 8</b>)의 답을 입력하면 영웅이 <b>불화살</b>을 쏴서 적을 쓰러뜨리고 <b>골드</b>를 얻어요.</li>
+      <li>콤보 1~4 불화살 → 5~9 <b>3연발</b> → 10부터 <b>불사조 화살</b>! 연속으로 맞힐수록 공격이 화려해져요.</li>
       <li>정답을 맞힐수록 영웅 게이지가 차요. 가득 차면 오른쪽 아래 버튼(또는 Q키)으로 필살기 <b>용사의 심판</b>!</li>
       <li>같은 답의 적이 여럿이면 성에 가장 가까운 적(노란 말풍선)부터 맞아요. 큰 적은 여러 번 맞혀야 해요(● 개수).</li></ul>
       <h3>${I('bow')} 탑 · 레벨업 · 진화</h3>
