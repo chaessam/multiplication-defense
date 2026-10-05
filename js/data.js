@@ -53,6 +53,37 @@ const GD = (() => {
     demonking: { name: '마왕', hp: 3500, speed: 0.42, size: 2.3, dmg: 120, gems: 100, probs: 12, boss: true, final: true,
       lore: '모든 어둠의 군대를 이끄는 마왕. 불타는 대검을 든 최후의 적. 문제를 12번 맞혀야 쓰러뜨릴 수 있어요!' },
   };
+  // 맵마다 테마에 맞는 적 (역할·능력치는 숲의 적과 같고 모습·이름만 다름)
+  const ROLES = ['goblin', 'soldier', 'knight', 'ogre', 'troll'];
+  const VARIANTS = {
+    desert: {
+      goblin: ['sandthief', '사막 도적', '터번을 두른 재빠른 도적. 굽은 칼을 들고 모래 위를 미끄러지듯 달려와요.'],
+      soldier: ['mummy', '미라 병사', '피라미드에서 깨어난 미라. 붕대 사이로 초록 눈이 빛나요. 금빛 창을 들고 줄지어 걸어와요.'],
+      knight: ['scorpion', '거대 전갈', '단단한 껍질로 덮인 거대 전갈. 집게를 딸깍거리며 느릿느릿 다가와요. 꼬리 독침을 조심!'],
+      ogre: ['minotaur', '미노타우로스', '황소 머리를 한 거인. 코에 금 고리를 걸고 커다란 도끼를 휘둘러요. 문제를 두 번 맞혀야 해요.'],
+      troll: ['sandgolem', '모래 골렘', '사막의 마법으로 움직이는 모래 바위 거인. 푸른 틈새가 빛나요. 문제를 세 번 맞혀야 해요.'],
+    },
+    snow: {
+      goblin: ['snowgob', '눈 고블린', '털모자를 쓴 파란 고블린. 고드름 단검을 들고 눈밭을 깡충깡충 뛰어와요.'],
+      soldier: ['frostbone', '얼음 해골', '얼음 왕관을 쓴 해골 병사. 차가운 푸른 눈으로 성을 노려봐요.'],
+      knight: ['frostknight', '서리 기사', '얼음 갑옷을 입은 기사. 푸르게 빛나는 서리 검과 방패로 무장했어요.'],
+      ogre: ['yeti', '예티', '설산에 사는 하얀 털복숭이 괴물. 거대한 고드름을 몽둥이처럼 휘둘러요. 문제를 두 번 맞혀야 해요.'],
+      troll: ['icegolem', '얼음 골렘', '빙하가 깨어나 생긴 거인. 등에 얼음 수정이 솟아 있어요. 문제를 세 번 맞혀야 해요.'],
+    },
+    volcano: {
+      goblin: ['fireimp', '불꽃 임프', '박쥐 날개와 꼬리를 단 작은 악마. 불타는 삼지창을 들고 쏜살같이 달려와요.'],
+      soldier: ['ashbone', '잿빛 해골', '화산재 속에서 일어난 해골 병사. 불타는 칼과 방패를 들었어요.'],
+      knight: ['obsidian', '흑요석 기사', '검은 흑요석 갑옷 틈으로 용암이 흘러요. 불꽃 검을 든 마왕의 근위대예요.'],
+      ogre: ['firedemon', '화염 마귀', '머리 위로 불꽃이 타오르는 마귀. 용암 도끼를 휘둘러요. 문제를 두 번 맞혀야 해요.'],
+      troll: ['lavagolem', '용암 골렘', '굳은 용암 바위로 된 거인. 몸의 틈새마다 용암이 이글거려요. 문제를 세 번 맞혀야 해요.'],
+    },
+  };
+  Object.entries(VARIANTS).forEach(([map, v]) => ROLES.forEach(role => {
+    const [id, name, lore] = v[role];
+    ENEMIES[id] = Object.assign({}, ENEMIES[role], { name, lore, role, map });
+  }));
+  // 도감 순서: 숲 → 사막 → 설원 → 화산 → 보스
+  const DEX_ENEMIES = [...ROLES, ...['desert', 'snow', 'volcano'].flatMap(m => ROLES.map(r => VARIANTS[m][r][0])), 'orcking', 'dragon', 'lich', 'demonking'];
   const BOSS_ORDER = ['orcking', 'dragon', 'lich'];
   const FINAL_WAVE = 30;
 
@@ -81,6 +112,12 @@ const GD = (() => {
       // 한 문제 2초 안쪽의 구구단 고수용
       spd: 1.15, spdCap: 2.2, minSpd: 0.5, hp: 1.35, iStart: 2.8, iMin: 1.35, iDec: 0.07, cBase: 8, cPer: 1.3, cMax: 36,
       gold: 0.9, castle: 100, startGold: 80, allDan: true,
+    },
+    expert: {
+      name: '매우 어려움', icon: 'skull', desc: '19단 모드! 11~19단이 나오고, 후반에는 19 × 19까지 나와요. 진짜 고수만 도전!',
+      // 두 자리 곱셈은 암산이 오래 걸리므로 한 문제 시간은 길게(6.5초 → 4.2초), 대신 적이 튼튼하고 많음
+      spd: 1.05, spdCap: 2.0, minSpd: 0.5, hp: 1.45, iStart: 6.5, iMin: 4.2, iDec: 0.08, cBase: 7, cPer: 1.1, cMax: 30,
+      gold: 0.75, castle: 100, startGold: 90, big: true,
     },
   };
 
@@ -188,6 +225,9 @@ const GD = (() => {
     { id: 'clear_easy', name: '첫 번째 왕관', icon: 'crown', tier: 'silver', desc: '쉬움 난이도 클리어', check: p => [p.clears.easy || 0, 1] },
     { id: 'clear_normal', name: '왕국의 영웅', icon: 'crown', tier: 'gold', desc: '보통 난이도 클리어', check: p => [p.clears.normal || 0, 1] },
     { id: 'clear_hard', name: '전설이 되다', icon: 'crown', tier: 'legend', desc: '어려움 난이도 클리어', check: p => [p.clears.hard || 0, 1] },
+    { id: 'clear_expert', name: '19단의 신', icon: 'crown', tier: 'legend', desc: '매우 어려움(19단) 난이도 클리어', check: p => [p.clears.expert || 0, 1] },
+    { id: 'dan_big', name: '두 자리 단 정복', icon: 'medal', tier: 'gold', desc: '11~19단 문제 200개 맞히기', check: p => [[11, 12, 13, 14, 15, 16, 17, 18, 19].reduce((s, d) => s + ((p.dan && p.dan[d]) || 0), 0), 200] },
+    { id: 'dex_all', name: '몬스터 박사', icon: 'book', tier: 'gold', desc: '도감의 몬스터 24종을 모두 만나기', check: p => [DEX_ENEMIES.filter(t => p.seen && p.seen[t]).length, DEX_ENEMIES.length] },
     { id: 'all_maps', name: '세계 여행자', icon: 'map', tier: 'legend', desc: '네 개의 맵을 모두 클리어', check: p => [Object.keys(p.mapClears || {}).length, 4] },
     { id: 'stars_12', name: '별을 모으는 자', icon: 'star', tier: 'legend', desc: '모든 맵에서 별 3개 (아무 난이도)', check: p => [p.totalStars || 0, 12] },
     { id: 'build_50', name: '건축가', icon: 'hammer', tier: 'bronze', desc: '탑 50개 건설', check: p => [p.built, 50] },
@@ -216,5 +256,6 @@ const GD = (() => {
     bounty: { name: '현상금', icon: 'coin', base: 80, growth: 1.5, max: 10, desc: l => `정답 골드 +15% (지금 +${l * 15}%)` },
   };
 
-  return { TOWERS, LV_DMG, LV_RATE, LV_RANGE, ENEMIES, BOSS_ORDER, FINAL_WAVE, HERO, DIFFS, MAPS, MAP_ORDER, CARDS, RARITY, ACH, TIERS, UPGRADES };
+  Object.entries(VARIANTS).forEach(([m, v]) => { MAPS[m].enemies = Object.fromEntries(ROLES.map(r => [r, v[r][0]])); });
+  return { TOWERS, LV_DMG, LV_RATE, LV_RANGE, ENEMIES, ROLES, VARIANTS, DEX_ENEMIES, BOSS_ORDER, FINAL_WAVE, HERO, DIFFS, MAPS, MAP_ORDER, CARDS, RARITY, ACH, TIERS, UPGRADES };
 })();

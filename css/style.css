@@ -595,3 +595,6 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
 .diff-easy.evolve, .diff-normal.evolve, .diff-hard.evolve { box-shadow: 0 4px 0 #0e1f2c, 0 0 0 3px var(--gold); }
 .mapc .saved-tag { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: #2f9e4f; color: #fff !important; font-size: 11px; width: fit-content; }
 .mapc .saved-tag svg { width: 12px; height: 12px; }
+.dexc .badge.maptag { background: #3f86c6; }
+.opt.diff-expert .icon { background: #efe3ff; border-color: #b998f2; }
+.diff-expert.evolve { box-shadow: 0 4px 0 #0e1f2c, 0 0 0 3px var(--gold); }

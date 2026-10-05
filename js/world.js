@@ -123,11 +123,14 @@ const World = (() => {
 
   function placeHero() {
     const cands = [];
-    for (const t of [0.9, 0.87, 0.93, 0.84, 0.8]) for (const side of [1, -1]) {
+    // 길의 화면 아래쪽(카메라 쪽, +z)을 먼저 고른다: 적 머리 위 문제 말풍선은 위로 뜨므로 영웅을 가리지 않음
+    for (const t of [0.9, 0.87, 0.93, 0.84, 0.8, 0.76]) {
       const p = pathAt(t);
-      cands.push({ x: p.x + (-p.dz) * 2.7 * side, z: p.z + p.dx * 2.7 * side });
+      const sides = p.dx >= 0 ? [1, -1] : [-1, 1];
+      for (const side of sides) cands.push({ x: p.x + (-p.dz) * 3.0 * side, z: p.z + p.dx * 3.0 * side });
     }
-    const ok = cands.find(c => distToPath(c.x, c.z) >= 2.3 && Math.hypot(c.x - CASTLE.x, c.z - CASTLE.z) > 4.6 && Math.abs(c.z) < 8.6) || cands[0];
+    cands.sort((a, b) => (b.z > 0.5 ? 1 : 0) - (a.z > 0.5 ? 1 : 0));
+    const ok = cands.find(c => distToPath(c.x, c.z) >= 2.6 && Math.hypot(c.x - CASTLE.x, c.z - CASTLE.z) > 4.6 && Math.abs(c.z) < 8.6) || cands[0];
     heroSpot.x = ok.x; heroSpot.z = ok.z;
   }
 
@@ -241,7 +244,7 @@ const World = (() => {
     // 나무 (인스턴싱)
     const trees = [];
     const treeOk = (x, z) => gateClear(x, z) && distToPath(x, z) > 2.6 && slots.every(s => Math.hypot(s.x - x, s.z - z) > 2.0) &&
-      Math.hypot(x - CASTLE.x, z - CASTLE.z) > 6.5 && Math.hypot(x - heroSpot.x, z - heroSpot.z) > 1.8 &&
+      Math.hypot(x - CASTLE.x, z - CASTLE.z) > 6.5 && Math.hypot(x - heroSpot.x, z - heroSpot.z) > 2.4 &&
       !lavaMats.some(l => Math.hypot(l.x - x, l.z - z) < l.r + 0.8);
     for (let i = 0; i < 900 && trees.length < 260; i++) {
       const x = -50 + R() * 104, z = -36 + R() * 72;
@@ -452,15 +455,33 @@ const World = (() => {
   function buildHeroObj() {
     heroObj = new T.Group();
     const m = Models.buildHero();
-    m.scale.setScalar(1.9);
+    m.scale.setScalar(2.6);
     heroObj.add(m);
-    // 발밑 원형 받침
-    const base = new T.Mesh(new T.CylinderGeometry(1.0, 1.1, 0.2, 12), mat('#e8e2d6'));
-    base.position.y = 0.1; base.receiveShadow = true; heroObj.add(base);
-    const ring = new T.Mesh(new T.RingGeometry(1.15, 1.35, 24).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: '#ffd23f', transparent: true, opacity: 0.7, depthWrite: false }));
-    ring.position.y = 0.22; heroObj.add(ring);
-    heroObj.userData = { model: m, ring };
-    m.position.y = 0.2;
+    // 발밑 2단 석재 받침 + 금테
+    const base = new T.Mesh(new T.CylinderGeometry(1.2, 1.35, 0.22, 12), mat('#e8e2d6'));
+    base.position.y = 0.11; base.receiveShadow = true; heroObj.add(base);
+    const base2 = new T.Mesh(new T.CylinderGeometry(0.95, 1.05, 0.16, 12), mat('#f4efe4'));
+    base2.position.y = 0.3; base2.receiveShadow = true; heroObj.add(base2);
+    const trim = new T.Mesh(new T.CylinderGeometry(1.36, 1.36, 0.06, 24), mat('#f4c247', { metalness: 0.5, roughness: 0.35 }));
+    trim.position.y = 0.2; heroObj.add(trim);
+    const ring = new T.Mesh(new T.RingGeometry(1.45, 1.7, 32).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: '#ffd23f', transparent: true, opacity: 0.7, depthWrite: false }));
+    ring.position.y = 0.25; heroObj.add(ring);
+    // 회전하는 마법진 + 빛기둥 (멀리서도 영웅이 보이게)
+    const rune = new T.Group(); rune.position.y = 0.4; heroObj.add(rune);
+    const runeMat = new T.MeshBasicMaterial({ color: '#7fe3ff', transparent: true, opacity: 0.55, depthWrite: false, side: T.DoubleSide });
+    rune.add(new T.Mesh(new T.RingGeometry(0.8, 0.88, 32).rotateX(-Math.PI / 2), runeMat));
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2;
+      const d = new T.Mesh(new T.PlaneGeometry(0.16, 0.16).rotateX(-Math.PI / 2), runeMat);
+      d.position.set(Math.cos(a) * 1.08, 0, Math.sin(a) * 1.08); d.rotation.y = a + Math.PI / 4; rune.add(d);
+    }
+    const beam = new T.Mesh(new T.CylinderGeometry(0.75, 1.0, 5.5, 16, 1, true), new T.MeshBasicMaterial({ color: '#ffe680', transparent: true, opacity: 0.12, depthWrite: false, side: T.DoubleSide }));
+    beam.position.y = 2.95; heroObj.add(beam);
+    // 머리 위 금빛 별 표식
+    const mark = new T.Mesh(new T.OctahedronGeometry(0.28, 0), new T.MeshBasicMaterial({ color: '#ffd23f' }));
+    mark.position.y = 5.3; heroObj.add(mark);
+    heroObj.userData = { model: m, ring, rune, beam, mark };
+    m.position.y = 0.38;
     heroObj.position.set(heroSpot.x, 0, heroSpot.z);
     // 처음엔 길 쪽을 바라봄
     const p = pathAt(0.8);
@@ -472,7 +493,7 @@ const World = (() => {
   function heroCast(x, z) { heroAim(x, z); hero.castT = 0.4; }
   function heroUlt() { hero.ultT = hero.ultDur; }
   function heroMuzzle() {
-    return { x: heroSpot.x + Math.cos(hero.aim) * 0.9, y: 2.6, z: heroSpot.z - Math.sin(hero.aim) * 0.9 };
+    return { x: heroSpot.x + Math.cos(hero.aim) * 1.1, y: 3.2, z: heroSpot.z - Math.sin(hero.aim) * 1.1 };
   }
   function syncHero(dt, time, gauge) {
     if (!heroObj) return;
@@ -485,14 +506,14 @@ const World = (() => {
     hero.shootT = Math.max(0, hero.shootT - dt);
     hero.castT = Math.max(0, hero.castT - dt);
     // 기본 자세: 석궁을 앞으로 겨눔
-    let arm = 1.35, armL = 0.9, y = 0.2, spin = 0;
+    let arm = 1.35, armL = 0.9, y = 0.38, spin = 0;
     u.body.position.y = Math.sin(time * 2.2) * 0.03;
     if (hero.shootT > 0) arm = 1.35 + hero.shootT * 1.2;
     if (hero.castT > 0) { arm = 2.7; armL = 2.4; }
     if (hero.ultT > 0) {
       hero.ultT = Math.max(0, hero.ultT - dt);
       const p = 1 - hero.ultT / hero.ultDur;
-      y = 0.2 + Math.sin(Math.min(1, p * 1.4) * Math.PI) * 3.2;
+      y = 0.38 + Math.sin(Math.min(1, p * 1.4) * Math.PI) * 3.2;
       spin = p < 0.7 ? p / 0.7 * Math.PI * 4 : 0;
       arm = 2.9; armL = 2.9;
     }
@@ -502,6 +523,12 @@ const World = (() => {
     m.position.y = y;
     m.rotation.y = hero.aim + spin;
     if (u.cape) u.cape.rotation.z = -0.15 - Math.sin(time * 3) * 0.06;
+    const hu = heroObj.userData;
+    hu.rune.rotation.y = time * 0.8;
+    hu.rune.children[0].material.opacity = 0.35 + gauge * 0.35;
+    hu.beam.material.opacity = 0.07 + gauge * 0.1 + (gauge >= 1 ? 0.06 + Math.sin(time * 6) * 0.04 : 0);
+    hu.mark.position.y = 5.3 + Math.sin(time * 2.5) * 0.15 + (hero.ultT > 0 ? 3 : 0);
+    hu.mark.rotation.y = time * 2;
     const ring = heroObj.userData.ring;
     ring.material.opacity = 0.35 + gauge * 0.5 + (gauge >= 1 ? Math.sin(time * 8) * 0.2 : 0);
     ring.scale.setScalar(1 + (gauge >= 1 ? Math.sin(time * 6) * 0.06 : 0));
@@ -957,6 +984,12 @@ const World = (() => {
         const f = moving ? Math.sin(time * 9) * 0.7 : 0.2;
         u.wings.forEach(w => { w.rotation.x = f * (w.scale.z); });
         u.tail.rotation.y = Math.sin(time * 3) * 0.3;
+      } else if (u.crawl) {
+        // 전갈: 다리 꼼지락, 꼬리 까딱, 집게 딸깍
+        u.legs.forEach((l, i) => { l.rotation.y = moving ? Math.sin(e.phase * 1.6 + i * 1.3) * 0.35 : 0; });
+        u.tail.rotation.z = Math.sin(time * 3 + e.phase) * 0.12;
+        u.claws.forEach((c, i) => { c.rotation.y = Math.sin(time * 4 + i * 2) * 0.2 * (i ? 1 : -1); });
+        u.body.position.y = moving ? Math.abs(Math.sin(e.phase * 1.6)) * 0.03 : 0;
       } else if (u.lich) {
         m.position.y = 0.4 + Math.sin(time * 2.4) * 0.15;
         u.armR.rotation.z = Math.sin(time * 2) * 0.15;
@@ -1130,8 +1163,8 @@ const World = (() => {
     return best;
   }
   function pickHero(sx, sy) {
-    const p = project(heroSpot.x, 1.8, heroSpot.z);
-    return Math.hypot(p.x - sx, p.y - sy) < 40;
+    const p = project(heroSpot.x, 2.2, heroSpot.z);
+    return Math.hypot(p.x - sx, p.y - sy) < 48;
   }
 
   function render() { renderer.render(scene, camera); }
