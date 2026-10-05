@@ -1104,7 +1104,7 @@
   }
   function updateControls() {
     if (S.mode === 'prep') {
-      btnStart.innerHTML = `${I('swords')} 웨이브 ${S.wave} 시작`;
+      btnStart.innerHTML = `<span class="l1">${I('swords')} 웨이브 ${S.wave}</span><span class="l2">시작</span>`;
       btnStart.classList.add('pulse');
       btnStart.disabled = false;
     } else if (S.mode === 'wave') {
@@ -1703,15 +1703,32 @@
     const hide = standalone();
     $('btnFull').classList.toggle('hidden', hide);
     $('btnFullTitle').classList.toggle('hidden', hide || on);
+    // 한 번도 안 눌러 봤으면 상단 버튼도 반짝이며 알려 줌
+    let used = false; try { used = lsGet(FS_KEY) === '1'; } catch (_) { /* 무시 */ }
+    $('btnFull').classList.toggle('nudge', !used && !on && !hide);
   }
+  const FS_KEY = 'gugudan-defense-fs-used';
+  function markFsUsed() { try { localStorage.setItem(FS_KEY, '1'); } catch (_) { /* 무시 */ } }
   async function toggleFull() {
     Sound.init();
+    markFsUsed(); fsIcon();
     if (fsEl()) { try { await (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (_) { /* 무시 */ } return; }
-    const d = document.documentElement, rq = d.requestFullscreen || d.webkitRequestFullscreen;
-    if (rq && !inApp) {
-      try { await rq.call(d, { navigationUI: 'hide' }); return; } catch (_) { /* 안내로 */ }
-    }
+    // 카카오톡(안드로이드) 안 브라우저도 전체화면이 되므로 먼저 시도하고, 안 될 때만 안내
+    if (await tryFull()) return;
     openFullGuide();
+  }
+  async function tryFull() {
+    const d = document.documentElement, rq = d.requestFullscreen || d.webkitRequestFullscreen;
+    if (!rq || fsEl()) return !!fsEl();
+    try { const r = rq.call(d, { navigationUI: 'hide' }); if (r && r.then) await r; } catch (_) { return false; }
+    return true;
+  }
+  // 휴대폰에서는 게임을 시작하는 버튼을 누를 때 저절로 전체화면 (버튼 누름이 있어야 브라우저가 허락함)
+  const isTouch = (navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window;
+  function autoFull() {
+    if (!isTouch || fsEl() || standalone()) return;
+    markFsUsed();
+    tryFull().then(fsIcon);
   }
   function openFullGuide() {
     let html = '<div class="fs-guide">';
@@ -1764,8 +1781,8 @@
     b.classList.add('pressed');
     setTimeout(() => b.classList.remove('pressed'), 90);
   }
-  $('btnNew').onclick = () => { Sound.init(); openDifficulty(); };
-  $('btnContinue').onclick = () => { Sound.init(); openContinue(); };
+  $('btnNew').onclick = () => { Sound.init(); autoFull(); openDifficulty(); };
+  $('btnContinue').onclick = () => { Sound.init(); autoFull(); openContinue(); };
   $('btnHelp').onclick = openHelp;
   $('btnBook').onclick = () => openBook();
   $('btnAch').onclick = openAchievements;
