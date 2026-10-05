@@ -6,6 +6,11 @@
   <meta name="theme-color" content="#1d3a4f">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="구구단 디펜스">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
   <title>구구단 디펜스</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,6 +28,7 @@
       <div class="pill gem-pill" title="보석"><span data-icon="gem"></span><b id="gems">0</b></div>
       <div class="pill wave"><span id="todIcon"></span><span class="wlabel">웨이브</span> <b id="waveNo">1</b><small id="waveMax">/30</small></div>
       <div class="hud-btns">
+        <button id="btnFull" class="icon-btn" aria-label="전체화면" data-icon="expand"></button>
         <button id="btnSound" class="icon-btn" aria-label="소리"></button>
         <button id="btnPause" class="icon-btn" aria-label="일시정지" data-icon="pause"></button>
       </div>
@@ -40,6 +46,7 @@
           <span class="lbl">필살기</span>
         </button>
         <div id="bossCut" class="hidden"><div class="slash"></div><div class="txt"><small id="bossCutSub">BOSS</small><b id="bossCutName"></b></div></div>
+        <div id="ultDim"></div>
         <div id="flash"></div>
       </div>
 
@@ -84,6 +91,7 @@
           <button id="btnAch" class="mini-btn"><span data-icon="trophy"></span>업적 <small id="achCount"></small></button>
           <button id="btnHelp" class="mini-btn"><span data-icon="scroll"></span>방법</button>
         </div>
+        <button id="btnFullTitle" class="full-btn"><span data-icon="expand"></span> 전체화면으로 크게 보기</button>
       </div>
       <p id="bestInfo" class="best"></p>
     </div>

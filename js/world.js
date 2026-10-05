@@ -790,6 +790,7 @@ const World = (() => {
   function clearFx() {
     fx.forEach(f => scene.remove(f.o)); fx.length = 0;
     fireArrows.forEach(a => scene.remove(a.g)); fireArrows.length = 0;
+    sweeps.forEach(w => scene.remove(w.g)); sweeps.length = 0;
     flames.forEach(f => { scene.remove(f.s); flamePool.push(f); }); flames.length = 0;
   }
 
@@ -807,7 +808,7 @@ const World = (() => {
   const FIRE_COLS = ['#ffe27a', '#ffa21f', '#ff5512', '#b8200c', '#4a1408'];
   const SMOKE_COLS = ['#6a5a52', '#3a3230'];
   const flames = [], flamePool = [];
-  const MAX_FLAMES = 320;
+  const MAX_FLAMES = 520;
   function flame(x, y, z, o = {}) {
     let f = flamePool.pop();
     if (!f) {
@@ -889,8 +890,54 @@ const World = (() => {
   const AX = new T.Vector3(1, 0, 0);
   function arrowTarget(a) {
     const e = a.e;
-    if (enemyObjs.has(e)) a.last.set(e.x, enemyCenterY(e), e.z);
+    if (e && enemyObjs.has(e)) a.last.set(e.x, enemyCenterY(e), e.z);
     return a.last;
+  }
+  // 하늘에서 떨어지는 불화살 (필살기 불화살 비)
+  function fireRain(x, z, delay, onHit, opts = {}) {
+    const e = opts.e || null;
+    const tx = e ? e.x : x, tz = e ? e.z : z;
+    const from = new T.Vector3(tx - 5 + rs(2), 20 + Math.random() * 4, tz - 3 + rs(2));
+    const a = {
+      e, g: fireArrowMesh(!!opts.big), big: !!opts.big, rain: true,
+      from, prev: from.clone(), last: new T.Vector3(tx, e ? enemyCenterY(e) : 0.3, tz),
+      side: 0, arc: 0, t: -delay / 0.45, dur: 0.45, onHit, small: !onHit,
+    };
+    a.g.visible = false;
+    scene.add(a.g);
+    fireArrows.push(a);
+  }
+  // 거대한 불사조가 성에서 길 끝까지 길을 따라 날며 불바다를 만듦
+  const sweeps = [];
+  function phoenixSweep(dur = 1.2) {
+    const g = fireArrowMesh(true);
+    g.scale.setScalar(2.6);
+    scene.add(g);
+    sweeps.push({ g, t: 0, dur, prev: null });
+  }
+  function updateSweeps(dt, time) {
+    for (let i = sweeps.length - 1; i >= 0; i--) {
+      const w = sweeps[i];
+      w.t += dt / w.dur;
+      const k = Math.min(1, w.t);
+      const p = pathAt(1 - k);
+      const pos = new T.Vector3(p.x, 4.5 + Math.sin(k * Math.PI) * 2.5, p.z);
+      if (w.prev) {
+        adir.copy(pos).sub(w.prev);
+        if (adir.lengthSq() > 1e-6) w.g.quaternion.setFromUnitVectors(AX, adir.normalize());
+      }
+      w.g.position.copy(pos);
+      const u = w.g.userData;
+      if (u.wings) u.wings.forEach(x => { x.rotation.x = Math.sin(time * 14) * 0.6 * x.scale.z; });
+      u.outer.scale.setScalar(u.base * (0.9 + Math.sin(time * 40) * 0.12));
+      // 거대한 불꽃 꼬리 + 길 위에 남는 불바다
+      for (let j = 0; j < 5; j++) flame(pos.x + rs(1.2), pos.y + rs(0.8), pos.z + rs(1.2), { vx: rs(1), vy: 1 + Math.random(), vz: rs(1), life: 0.35 + Math.random() * 0.3, size: 1.4 + Math.random(), grow: -0.1 });
+      for (let j = 0; j < 2; j++) flame(p.x + rs(1.4), 0.3, p.z + rs(1.4), { vy: 1.2 + Math.random() * 1.2, life: 1.2 + Math.random() * 0.9, size: 0.9 + Math.random() * 0.6, grow: -0.25 });
+      if (Math.random() < 0.6) flame(pos.x, pos.y, pos.z, { vy: 1.5, life: 1.0, size: 1.6, grow: 0.6, smoke: true });
+      fireLight.position.set(pos.x, pos.y, pos.z); fireLightT = 0.3; fireLightMax = 60;
+      w.prev = pos;
+      if (w.t >= 1) { scene.remove(w.g); sweeps.splice(i, 1); }
+    }
   }
   // tier: 'arrow' 한 발 / 'volley' 세 발 / 'phoenix' 불사조. 마지막 화살이 꽂힐 때 onHit(위치)
   function fireArrow(e, tier, onHit) {
@@ -917,8 +964,9 @@ const World = (() => {
       a.t += dt / a.dur;
       if (a.t < 0) continue;
       if (!a.g.visible) {
-        // 3연발: 발사 순간 영웅 위치에서 출발
-        const m = heroMuzzle(); a.from.set(m.x, m.y, m.z); a.prev.copy(a.from); a.g.visible = true;
+        // 3연발: 발사 순간 영웅 위치에서 출발 (불화살 비는 하늘에서)
+        if (!a.rain) { const m = heroMuzzle(); a.from.set(m.x, m.y, m.z); }
+        a.prev.copy(a.from); a.g.visible = true;
       }
       const to = arrowTarget(a);
       const k = Math.min(1, a.t);
@@ -947,7 +995,7 @@ const World = (() => {
       if (a.t >= 1) {
         scene.remove(a.g);
         fireArrows.splice(i, 1);
-        fireImpact(to.x, to.y, to.z, a.big, !a.onHit);
+        fireImpact(to.x, to.y, to.z, a.big, a.small || !a.onHit);
         if (a.onHit) a.onHit({ x: to.x, y: to.y, z: to.z });
       }
     }
@@ -1292,6 +1340,7 @@ const World = (() => {
     updateParticles(dt, time);
     updateFx(dt);
     updateFireArrows(dt, time);
+    updateSweeps(dt, time);
     updateFlames(dt);
     stepCamera(realDt);
   }
@@ -1316,6 +1365,9 @@ const World = (() => {
     const dir = portrait ? new T.Vector3(-Math.cos(el), Math.sin(el), 0) : new T.Vector3(0, Math.sin(el), Math.cos(el));
     const tgt = center.clone();
     if (!portrait) tgt.z += 0.6; else tgt.x -= 0.6;
+    // 처음 화면의 화면 밀기(view offset)가 남아 있으면 맞춤 계산이 틀어져 카메라가 너무 멀어짐 → 계산 동안 끔
+    const hadView = camera.view && camera.view.enabled;
+    if (hadView) camera.clearViewOffset();
     camera.updateProjectionMatrix();
     let lo = 5, hi = 300;
     for (let i = 0; i < 30; i++) {
@@ -1334,6 +1386,9 @@ const World = (() => {
     camera.lookAt(tgt);
     camera.updateMatrixWorld();
     cam.basePos.copy(camera.position); cam.baseTgt.copy(tgt);
+    // 안개는 카메라 거리에 맞춰 전장 너머에서만 (전장은 늘 선명하게)
+    scene.fog.near = hi + 18; scene.fog.far = hi + 90;
+    if (hadView && cam.vo > 0.001) camera.setViewOffset(viewW, viewH, 0, viewH * 0.3 * cam.vo * cam.vo, viewW, viewH);
   }
 
   const pv = new T.Vector3();
@@ -1393,7 +1448,7 @@ const World = (() => {
     init, loadMap, resize, render, sync, project, pickSlot, pickHero, setTime, focusOn, focusing, portraitOf,
     get slots() { return slots; }, get pathLength() { return pathLength; }, get mapId() { return mapId; }, get night() { return env.night; },
     pathAt, CASTLE, castleTop, heroSpot, GATE, setGate, gateHit, gateShot, setTitleCam,
-    heroShoot, heroCast, heroUlt, heroMuzzle, fireArrow,
+    heroShoot, heroCast, heroUlt, heroMuzzle, fireArrow, fireRain, phoenixSweep, fireBurst,
     addEnemy, removeEnemy, clearEnemies, enemyHeadY, enemyCenterY,
     addTower, removeTower, upgradeTower, clearTowers, muzzle,
     addProjectile, removeProjectile, clearProjectiles,
