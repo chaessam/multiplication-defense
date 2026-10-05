@@ -425,22 +425,37 @@
     Profile.ult();
     World.heroUlt();
     Sound.play('ult');
-    showBanner(`${I('swords')} 용사의 심판!`, 'good', 1500);
-    S.enemies.forEach(e => { e.stun = Math.max(e.stun, 1.6); });
-    S.timers.push({ t: 0.7, fn: ultImpact });
+    showBanner(`${I('firearrow')} 용사의 심판!`, 'good', 1600);
+    // 하늘이 붉게 어두워지고, 모든 적이 겁에 질려 멈춤
+    const dim = $('ultDim');
+    dim.classList.remove('on'); void dim.offsetWidth; dim.classList.add('on');
+    S.shake = Math.max(S.shake, 6);
+    const hs = World.heroSpot;
+    World.pillar(hs.x, hs.z, '#ff7a1a', 12);
+    World.fireBurst(hs.x, 1.2, hs.z, 50, 9, 0.55);
+    World.ring(hs.x, hs.z, 10, '#ff8a1a', 0.8);
+    S.enemies.forEach(e => { e.stun = Math.max(e.stun, 2.6); });
+    S.timers.push({ t: 0.45, fn: () => World.phoenixSweep(1.1) });
+    S.timers.push({ t: 0.75, fn: ultImpact });
   }
   function ultImpact() {
-    const hs = World.heroSpot;
-    S.white = 0.7; S.shake = 16; S.hitStop = 0.12;
-    World.ring(hs.x, hs.z, 14, '#ffe14a', 0.9);
-    World.ring(hs.x, hs.z, 9, '#ffffff', 0.7);
-    World.burst(hs.x, 1, hs.z, 40, ['#ffe14a', '#ffffff', '#ffb030'], 1.8);
+    S.white = 0.35; S.shake = 18; S.hitStop = 0.1;
+    Sound.play('fireHit', 'phoenix');
     const pow = 1 + MOD.ultPow;
+    // 길 전체에 불화살 비
+    for (let i = 0; i < 22; i++) {
+      const p = World.pathAt(Math.random());
+      World.fireRain(p.x + (Math.random() - 0.5) * 3, p.z + (Math.random() - 0.5) * 3, Math.random() * 0.9, null);
+    }
+    // 적마다 불화살 세 발: 마지막 화살이 꽂히면 처치 (보스는 정답 1개 분량)
     S.enemies.slice().sort((a, b) => b.t - a.t).forEach((e, i) => {
-      World.meteor(e.x, e.z, i * 0.05, () => {
-        World.explosion(e.x, 0.6, e.z, 1.8, '#ffe14a');
+      const d0 = Math.min(0.9, i * 0.04);
+      [0, 0.12].forEach(d => World.fireRain(0, 0, d0 + d, null, { e }));
+      World.fireRain(0, 0, d0 + 0.24, () => {
         Sound.play('hit');
         if (e.dead) return;
+        e.burnT = Math.max(e.burnT, 2); e.burnDps = Math.max(e.burnDps, e.maxHp * 0.04);
+        knock(e, e.def.boss ? 0.5 : 1.6, true);
         // 필살기는 정답으로 모은 힘이라 쓰러뜨릴 수 있음: 일반 적은 처치, 보스는 정답 1개 분량
         if (e.def.boss) {
           const per = e.maxHp / e.def.probs;
@@ -448,9 +463,10 @@
           else { e.probsLeft--; e.hp = Math.min(e.hp, e.probsLeft * per); e.exhausted = false; e.q = makeProblem(true); e.hitT = 0.2; }
         } else damage(e, e.maxHp * pow + e.hp, { lethal: true });
         S.enemies = S.enemies.filter(x => !x.dead);
-      }, 'blade');
+      }, { e, big: !!e.def.boss });
     });
   }
+
 
   // ================= 업데이트 =================
   function update(dt) {
@@ -566,7 +582,7 @@
     Sound.play('correct', S.combo);
     Sound.play('fireShot', tier);
     flashBox('right');
-    addGauge(0.12 * (1 + 0.05 * S.up.hero) * (1 + MOD.heroCharge));
+    addGauge(0.05 * (1 + 0.05 * S.up.hero) * (1 + MOD.heroCharge)); // 정답 약 20개면 가득
     const lethal = e.def.probs <= 1 || e.probsLeft <= 1;
     if (lethal) e.doomed = true; // 화살이 꽂힐 때까지 다른 답의 대상이 되지 않음
     else {
@@ -1672,6 +1688,56 @@
   $('btnUpgrade').onclick = () => { if (S.mode === 'prep' || S.mode === 'wave') openUpgrades(); };
   skillBtns.forEach(b => b.onclick = () => useSkill(b.dataset.skill));
   $('btnPause').onclick = openPause;
+  // ================= 전체화면 =================
+  // 안드로이드 크롬 등은 진짜 전체화면, 아이폰 사파리·카카오톡 안 브라우저는 안내(다른 브라우저로 열기 / 홈 화면에 추가)
+  const UA = navigator.userAgent || '';
+  const inKakao = /KAKAOTALK/i.test(UA);
+  const inApp = inKakao || /Instagram|FBAN|FBAV|NAVER|Line\//i.test(UA);
+  const isIOS = /iPhone|iPad|iPod/i.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = () => (window.matchMedia && (matchMedia('(display-mode: fullscreen)').matches || matchMedia('(display-mode: standalone)').matches)) || navigator.standalone === true;
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  function fsIcon() {
+    const on = !!fsEl();
+    $('btnFull').innerHTML = I(on ? 'shrink' : 'expand');
+    $('btnFull').setAttribute('aria-label', on ? '전체화면 끝내기' : '전체화면');
+    const hide = standalone();
+    $('btnFull').classList.toggle('hidden', hide);
+    $('btnFullTitle').classList.toggle('hidden', hide || on);
+  }
+  async function toggleFull() {
+    Sound.init();
+    if (fsEl()) { try { await (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (_) { /* 무시 */ } return; }
+    const d = document.documentElement, rq = d.requestFullscreen || d.webkitRequestFullscreen;
+    if (rq && !inApp) {
+      try { await rq.call(d, { navigationUI: 'hide' }); return; } catch (_) { /* 안내로 */ }
+    }
+    openFullGuide();
+  }
+  function openFullGuide() {
+    let html = '<div class="fs-guide">';
+    if (inKakao) {
+      html += `<p>카카오톡 안에서는 화면을 꽉 채울 수 없어요. <b>크롬이나 사파리로 열면</b> 크게 즐길 수 있어요.</p>
+        <button class="big-btn" id="fsExternal">${I('play')} 다른 브라우저로 열기</button>
+        <p style="font-size:13px;color:#6b7a88;margin-top:10px">안 열리면: 오른쪽 아래(또는 위) <b>⋮</b> 메뉴 → <b>다른 브라우저로 열기</b></p>`;
+    } else if (inApp) {
+      html += `<p>앱 안의 브라우저에서는 화면을 꽉 채울 수 없어요. 메뉴(⋮ 또는 ···)에서 <b>브라우저로 열기</b>를 눌러 주세요.</p>`;
+    } else if (isIOS) {
+      html += `<p>아이폰은 <b>홈 화면에 추가</b>하면 주소창 없이 꽉 찬 화면으로 할 수 있어요.</p>
+        <ol><li>사파리 아래쪽 <b>공유 버튼</b>(네모에 위 화살표)을 눌러요.</li><li><b>홈 화면에 추가</b>를 골라요.</li><li>홈 화면의 <b>구구단 디펜스</b> 아이콘으로 실행해요.</li></ol>`;
+    } else {
+      html += `<p>이 브라우저는 전체화면을 막고 있어요. 브라우저 메뉴(⋮)에서 <b>홈 화면에 추가</b>(앱 설치)를 하면 아이콘으로 꽉 찬 화면에서 할 수 있어요.</p>`;
+    }
+    html += '</div>';
+    openModal(`${I('expand')} 크게 보기`, html);
+    const ex = mb('#fsExternal');
+    if (ex) ex.onclick = () => { location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href); };
+  }
+  $('btnFull').onclick = toggleFull;
+  $('btnFullTitle').onclick = toggleFull;
+  document.addEventListener('fullscreenchange', () => { fsIcon(); requestAnimationFrame(resize); });
+  document.addEventListener('webkitfullscreenchange', () => { fsIcon(); requestAnimationFrame(resize); });
+  fsIcon();
+
   function soundIcon() { $('btnSound').innerHTML = I(Sound.muted ? 'mute' : 'sound'); }
   $('btnSound').onclick = () => {
     Sound.init();

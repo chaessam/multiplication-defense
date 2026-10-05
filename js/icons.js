@@ -55,6 +55,8 @@ const Icons = (() => {
       <path d="M28.6 3.2l-5.8 2.6 2.8 2.8z" fill="#e8eef5" stroke="${O}" stroke-width="1.4" stroke-linejoin="round"/>
       <path d="M27.6 3.8l-3.4 1.6" stroke="#ffffff" stroke-width=".9" stroke-linecap="round"/>
       <circle cx="17.6" cy="17.4" r="1" fill="#ff7a1a"/><circle cx="21.4" cy="18.6" r=".8" fill="#ffd23f"/><circle cx="29.2" cy="15.2" r=".7" fill="#ffd23f"/>`,
+    expand: `<path d="M5 12V5h7M20 5h7v7M27 20v7h-7M12 27H5v-7" fill="none" stroke="${O}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 12V5h7M20 5h7v7M27 20v7h-7M12 27H5v-7" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`,
+    shrink: `<path d="M12 5v7H5M27 12h-7V5M20 27v-7h7M5 20h7v7" fill="none" stroke="${O}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 5v7H5M27 12h-7V5M20 27v-7h7M5 20h7v7" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`,
     hero: `<path d="M6 30c0-7 4-11 10-11s10 4 10 11z" fill="#3f6fd8" ${sw}/><circle cx="16" cy="12" r="7" fill="#f2c39c" ${sw}/><path d="M8 11c0-6 4-9 8-9s8 3 8 9l-3-2-5 2-5-2z" fill="#ffd23f" ${sw}/><circle cx="13" cy="13" r="1.2" fill="#13222f"/><circle cx="19" cy="13" r="1.2" fill="#13222f"/>`,
     card: `<rect x="6" y="3" width="20" height="26" rx="3" fill="#7b6cf0" ${sw}/><path d="M16 9l2 4 4 .5-3 3 .8 4.5L16 19l-3.8 2 .8-4.5-3-3 4-.5z" fill="#ffd23f"/>`,
     check: `<path d="M5 17l7 7L27 8" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 17l7 7L27 8" fill="none" ${sw}/>`,

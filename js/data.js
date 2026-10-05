@@ -3,7 +3,7 @@ const GD = (() => {
   // ---------------- 탑 (레벨 1~3, 3레벨은 진화) ----------------
   const TOWERS = {
     archer: {
-      name: '궁수탑', icon: 'bow', cost: 60, range: 7.5, rate: 1.15, dmg: 14,
+      name: '궁수탑', icon: 'bow', cost: 60, range: 7.5, rate: 1.0, dmg: 10,
       desc: '빠르게 화살을 쏴서 적을 지치게 하는 기본 탑',
       levels: [
         { name: '궁수탑', desc: '나무로 지은 망루에서 궁수가 화살을 쏴요.' },
@@ -12,7 +12,7 @@ const GD = (() => {
       ],
     },
     cannon: {
-      name: '대포', icon: 'bomb', cost: 110, range: 8.2, rate: 0.42, dmg: 40, splash: 2.4,
+      name: '대포', icon: 'bomb', cost: 110, range: 8.2, rate: 0.42, dmg: 30, splash: 2.4,
       desc: '폭발로 여러 적을 한꺼번에 지치게 해요',
       levels: [
         { name: '대포', desc: '돌 포대 위의 청동 대포. 폭발로 주변 적까지 공격해요.' },
@@ -21,7 +21,7 @@ const GD = (() => {
       ],
     },
     mage: {
-      name: '서리 마법탑', icon: 'crystal', cost: 90, range: 6.8, rate: 0.85, dmg: 9, slow: 0.45, slowT: 2.0,
+      name: '서리 마법탑', icon: 'crystal', cost: 90, range: 6.8, rate: 0.85, dmg: 7, slow: 0.45, slowT: 2.0,
       desc: '적을 느리게 만드는 얼음 마법',
       levels: [
         { name: '서리 마법탑', desc: '떠 있는 얼음 수정이 적을 느리게 만들어요.' },
@@ -30,7 +30,7 @@ const GD = (() => {
       ],
     },
   };
-  const LV_DMG = [1, 1.7, 2.8], LV_RATE = [1, 1.1, 1.2], LV_RANGE = [1, 1.08, 1.16];
+  const LV_DMG = [1, 1.55, 2.4], LV_RATE = [1, 1.1, 1.2], LV_RANGE = [1, 1.08, 1.16];
 
   // ---------------- 적 ----------------
   const ENEMIES = {
@@ -89,7 +89,7 @@ const GD = (() => {
 
   // ---------------- 영웅 ----------------
   const HERO = {
-    name: '용사 아린', range: 8.5, rate: 0.9, dmg: 18,
+    name: '용사 아린', range: 8.5, rate: 0.9, dmg: 15,
     lore: '왕국을 지키는 젊은 용사. 장궁에 구구단의 힘을 불어넣어 불화살을 쏴요. 연속으로 맞히면 3연발, 불사조 화살까지! 정답을 맞힐수록 힘이 모여 필살기 "용사의 심판"을 쓸 수 있어요.',
   };
 
