@@ -471,9 +471,9 @@
     S.shake = Math.min(16, 6 + e.def.dmg * 0.25);
     S.castleFlash = 0.5;
     S.combo = 0;
-    const C = World.CASTLE;
-    floater(C.x - 1, 5, C.z, `-${e.def.dmg}`, '#ff5040', 26, 'heart');
-    World.burst(C.x - 2.2, 1.5, C.z, 16, ['#d3cbbd', '#a69f92', '#ffb030'], 1.2);
+    const Gt = World.GATE;
+    floater(Gt.x, 4, Gt.z, `-${e.def.dmg}`, '#ff5040', 26, 'heart');
+    World.gateHit();
     Sound.play('castleHit');
     if (navigator.vibrate) try { navigator.vibrate(60); } catch (_) { /* 무시 */ }
     if (S.castleHp <= 0) gameOver();
@@ -675,6 +675,10 @@
     Sound.play('horn');
     Sound.setMode('battle');
     showBanner(`${I('swords')} 웨이브 ${S.wave}`, '', 1600);
+    // 성문을 닫고, 첫 웨이브와 보스 웨이브에는 성문을 비춤
+    World.setGate(true);
+    setTimeout(() => Sound.play('gate'), 250);
+    if (S.wave === 1 || S.wave % 5 === 0) { World.gateShot(0.9); S.slowmo = Math.max(S.slowmo, 1.2); }
     updateControls();
     updatePrepInfo();
   }
@@ -687,6 +691,8 @@
     const stars = ws.dmg === 0 ? 3 : ws.dmg <= max * 0.15 ? 2 : 1;
     if (stars === 3) Profile.perfectWave();
     Sound.play('victory');
+    World.setGate(false);
+    setTimeout(() => Sound.play('gateOpen'), 400);
     const clearedWave = S.wave;
     const clearedNow = S.wave === FINAL_WAVE && !S.cleared;
     if (clearedNow) S.cleared = true;
@@ -714,7 +720,7 @@
   function showClear() {
     Sound.play('victory');
     setTimeout(() => Sound.play('achieve'), 700);
-    World.focusOn(World.CASTLE.x, 4, World.CASTLE.z, 3.5, 26);
+    World.gateShot(3.5, 20);
     for (let i = 0; i < 6; i++) setTimeout(() => World.burst(World.CASTLE.x + (Math.random() - 0.5) * 6, 8 + Math.random() * 3, World.CASTLE.z + (Math.random() - 0.5) * 6, 30, ['#ffd23f', '#ff5a6a', '#5fd3ff', '#7dff8a', '#ffffff'], 1.5, { grav: -6 }), i * 350);
     $('clearStars').innerHTML = [0, 1, 2].map(() => `<span class="on">${I('star')}</span>`).join('');
     $('clearStats').innerHTML =
@@ -765,6 +771,7 @@
     S.castleHp = castleMax();
     Profile.seenHero();
     enterPrep();
+    gateIntro();
   }
   function loadGame(d, fullHp) {
     clearField(true);
@@ -785,7 +792,14 @@
     S.castleHp = fullHp ? max : Math.max(1, Math.min(max, d.castleHp || max));
     Profile.seenHero();
     enterPrep();
-    if (S.pendingCards) setTimeout(openCards, 400);
+    gateIntro();
+    if (S.pendingCards) setTimeout(openCards, 1600);
+  }
+  // 게임 시작 연출: 성문 앞에서 시작해 전장 전체로 물러남
+  function gateIntro() {
+    World.setGate(true, true);
+    World.gateShot(0.9, 10, true);
+    setTimeout(() => { World.setGate(false); Sound.play('gateOpen'); }, 500);
   }
   function clearField(towersToo) {
     World.clearEnemies(); World.clearProjectiles(); World.clearFx();
@@ -1050,6 +1064,7 @@
   function beginPlay() {
     Sound.init();
     Sound.startMusic();
+    World.setTitleCam(false);
     hide('title'); hide('gameover'); hide('clear');
     requestAnimationFrame(resize);
   }
@@ -1058,6 +1073,8 @@
     clearField(true);
     Sound.setMode('title');
     World.setTime('day');
+    World.setGate(false);
+    World.setTitleCam(true);
     refreshTitle();
     show('title');
     updateHud(true);
@@ -1570,6 +1587,7 @@
   World.loadMap(sv0 && MAPS[sv0.map] ? sv0.map : 'forest');
   S.map = World.mapId;
   resize();
+  World.setTitleCam(true);
   refreshTitle();
   updateControls();
   requestAnimationFrame(frame);

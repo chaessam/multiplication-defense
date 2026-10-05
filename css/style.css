@@ -584,3 +584,8 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
   .icon-btn { width: 30px; height: 30px; }
   .icon-btn .ic { width: 18px; height: 18px; }
 }
+
+/* 처음 화면: 카드를 아래쪽에 두고 위쪽에 성문이 보이도록 */
+@media (min-height: 560px) {
+  #title { align-items: flex-end; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+}

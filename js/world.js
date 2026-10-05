@@ -15,6 +15,12 @@ const World = (() => {
   }
 
   const CASTLE = { x: 20.6, z: 0 };
+  // 성을 비스듬히 돌려 성문이 카메라 쪽을 보게 함
+  const CASTLE_YAW = 0.55;
+  const GATE_N = { x: -Math.cos(CASTLE_YAW), z: Math.sin(CASTLE_YAW) }; // 성문이 바라보는 방향
+  const gateAt = d => ({ x: CASTLE.x - (2.45 + d) * Math.cos(CASTLE_YAW), z: CASTLE.z + (2.45 + d) * Math.sin(CASTLE_YAW) });
+  const GATE = gateAt(0);
+  const gateDir = new T.Vector3(GATE_N.x, 0.62, GATE_N.z).normalize();
   const BOUNDS = { x0: -21.5, x1: 24.5, z0: -9.6, z1: 9.6 };
 
   // ================= 맵 상태 =================
@@ -84,7 +90,10 @@ const World = (() => {
     scene.add(mapGroup);
     lavaMats = [];
     // 길
-    curve = new T.CatmullRomCurve3(M.path.map(([x, z]) => new T.Vector3(x, 0, z)), false, 'centripetal');
+    // 길의 끝은 항상 성문 앞
+    const end = gateAt(0.45);
+    const pts = M.path.slice(0, -1).concat([[end.x, end.z]]);
+    curve = new T.CatmullRomCurve3(pts.map(([x, z]) => new T.Vector3(x, 0, z)), false, 'centripetal');
     lut = [];
     for (let i = 0; i <= LUT_N; i++) {
       const u = i / LUT_N, p = curve.getPointAt(u), tg = curve.getTangentAt(u);
@@ -98,7 +107,9 @@ const World = (() => {
     buildPads();
     castleObj = Models.buildCastle(theme);
     castleObj.position.set(CASTLE.x, 0, CASTLE.z);
+    castleObj.rotation.y = CASTLE_YAW;
     mapGroup.add(castleObj);
+    gate.k = gate.goal = 0; castleObj.userData.updateGate(0);
     castleTop.set(CASTLE.x + 1.2, 8.5, CASTLE.z);
     buildHeroObj();
     env.cur = null;
@@ -164,7 +175,10 @@ const World = (() => {
     mapGroup.add(ground);
 
     const mesas = [];
+    const gf = gateAt(3.5);
+    const gateClear = (x, z, r = 0) => Math.hypot(x - gf.x, z - gf.z) > r + 5;
     const freeSpot = (x, z, r) =>
+      gateClear(x, z, r) &&
       distToPath(x, z) > r + 2.6 &&
       slots.every(s => Math.hypot(s.x - x, s.z - z) > r + 2.2) &&
       Math.hypot(x - CASTLE.x, z - CASTLE.z) > r + 6 &&
@@ -226,7 +240,7 @@ const World = (() => {
 
     // 나무 (인스턴싱)
     const trees = [];
-    const treeOk = (x, z) => distToPath(x, z) > 2.6 && slots.every(s => Math.hypot(s.x - x, s.z - z) > 2.0) &&
+    const treeOk = (x, z) => gateClear(x, z) && distToPath(x, z) > 2.6 && slots.every(s => Math.hypot(s.x - x, s.z - z) > 2.0) &&
       Math.hypot(x - CASTLE.x, z - CASTLE.z) > 6.5 && Math.hypot(x - heroSpot.x, z - heroSpot.z) > 1.8 &&
       !lavaMats.some(l => Math.hypot(l.x - x, l.z - z) < l.r + 0.8);
     for (let i = 0; i < 900 && trees.length < 260; i++) {
@@ -862,19 +876,64 @@ const World = (() => {
     }
   }
 
+  // ================= 성문 =================
+  const gate = { k: 0, goal: 0, shake: 0 };
+  function setGate(closed, instant) {
+    gate.goal = closed ? 1 : 0;
+    if (instant) { gate.k = gate.goal; if (castleObj) castleObj.userData.updateGate(gate.k); }
+  }
+  function stepGate(dt) {
+    if (!castleObj) return;
+    const before = gate.k;
+    if (gate.k < gate.goal) gate.k = Math.min(gate.goal, gate.k + dt * 3.2);
+    else if (gate.k > gate.goal) gate.k = Math.max(gate.goal, gate.k - dt * 1.2);
+    // 닫히는 순간 쿵! 먼지
+    if (before < 1 && gate.k >= 1) burst(GATE.x + GATE_N.x * 0.6, 0.4, GATE.z + GATE_N.z * 0.6, 18, ['#c9b48a', '#a89a80', '#ffffff'], 0.9, { grav: -6 });
+    gate.shake = Math.max(0, gate.shake - dt * 3);
+    const k = gate.k + (gate.shake > 0 ? Math.sin(performance.now() / 25) * 0.05 * gate.shake : 0);
+    castleObj.userData.updateGate(Math.max(0, Math.min(1.04, k)));
+  }
+  function gateHit() {
+    gate.shake = 1;
+    burst(GATE.x + GATE_N.x * 0.4, 1.2, GATE.z + GATE_N.z * 0.4, 16, ['#8a5a32', '#d3cbbd', '#ffb030'], 1.1);
+  }
+
   // ================= 카메라 연출 =================
-  const cam = { basePos: new T.Vector3(), baseTgt: new T.Vector3(), focus: new T.Vector3(), dist: 22, f: 0, goal: 0, hold: 0 };
-  function focusOn(x, y, z, hold = 1.6, dist = 22) {
+  const cam = { basePos: new T.Vector3(), baseTgt: new T.Vector3(), focus: new T.Vector3(), dist: 22, f: 0, goal: 0, hold: 0, dir: null, orbit: false, ang: 0, vo: 0 };
+  function focusOn(x, y, z, hold = 1.6, dist = 22, opts = {}) {
     cam.focus.set(x, y, z); cam.dist = dist; cam.goal = 1; cam.hold = hold;
+    cam.dir = opts.dir ? opts.dir.clone() : null;
+    if (opts.instant) cam.f = 1;
+  }
+  // 성문 클로즈업 (게임 시작 / 웨이브 시작)
+  function gateShot(hold = 0.9, dist = 13, instant = false) {
+    cam.orbit = false;
+    focusOn(GATE.x, 1.8, GATE.z, hold, dist, { dir: gateDir, instant });
+  }
+  // 처음 화면: 성문 앞을 천천히 도는 카메라
+  function setTitleCam(on) {
+    cam.orbit = on;
+    // 바닥 아래 지점을 바라보게 해서 성이 화면 위쪽에 오도록 (아래는 타이틀 카드 자리)
+    if (on) { cam.ang = 0; cam.vo = 1; focusOn(GATE.x + 0.8, 2.4, GATE.z - 0.4, 1e9, 24, { dir: gateDir, instant: true }); }
+    else { cam.goal = 0; cam.hold = 0; }
   }
   function stepCamera(dt) {
+    if (cam.orbit) {
+      cam.ang += dt * 0.18;
+      const a = Math.sin(cam.ang) * 0.55;
+      cam.dir = new T.Vector3(GATE_N.x * Math.cos(a) - GATE_N.z * Math.sin(a), 0.7, GATE_N.z * Math.cos(a) + GATE_N.x * Math.sin(a)).normalize();
+    }
+    // 처음 화면에서는 화면 중심을 아래로 밀어 성이 위쪽에 보이게 (아래는 타이틀 카드)
+    cam.vo = Math.max(0, Math.min(1, (cam.vo || 0) + (cam.orbit ? dt * 2 : -dt * 1.5)));
+    if (cam.vo > 0.001) camera.setViewOffset(viewW, viewH, 0, viewH * 0.3 * cam.vo * cam.vo, viewW, viewH);
+    else if (camera.view && camera.view.enabled) camera.clearViewOffset();
     if (cam.goal === 1) {
       cam.f = Math.min(1, cam.f + dt * 2.2);
       if (cam.f >= 1) { cam.hold -= dt; if (cam.hold <= 0) cam.goal = 0; }
     } else cam.f = Math.max(0, cam.f - dt * 1.4);
     const k = cam.f * cam.f * (3 - 2 * cam.f);
     if (k <= 0) { camera.position.copy(cam.basePos); camera.lookAt(cam.baseTgt); return; }
-    const dir = cam.basePos.clone().sub(cam.baseTgt).normalize();
+    const dir = cam.dir || cam.basePos.clone().sub(cam.baseTgt).normalize();
     const fp = cam.focus.clone().addScaledVector(dir, cam.dist);
     camera.position.copy(cam.basePos).lerp(fp, k);
     camera.lookAt(cam.baseTgt.clone().lerp(cam.focus, k));
@@ -1011,6 +1070,7 @@ const World = (() => {
     stepBirds(realDt, time);
     stepWeather(dt);
     stepEnv(realDt);
+    stepGate(realDt);
     updateParticles(dt, time);
     updateFx(dt);
     stepCamera(realDt);
@@ -1019,7 +1079,10 @@ const World = (() => {
   // ================= 카메라 / 화면 =================
   const corners = [];
   [BOUNDS.x0, BOUNDS.x1].forEach(x => [BOUNDS.z0, BOUNDS.z1].forEach(z => [0, 3].forEach(y => corners.push(new T.Vector3(x, y, z)))));
-  [[CASTLE.x - 2.5, 7, -4], [CASTLE.x - 2.5, 7, 4], [CASTLE.x + 3.5, 9, -4], [CASTLE.x + 3.5, 9, 4]].forEach(([x, y, z]) => corners.push(new T.Vector3(x, y, z)));
+  [[-2.6, -3.4, 6], [-2.6, 3.4, 6], [4.3, -4.5, 8], [4.3, 4.5, 8], [1.5, 0, 9.5]].forEach(([lx, lz, y]) => {
+    const c = Math.cos(CASTLE_YAW), sn = Math.sin(CASTLE_YAW);
+    corners.push(new T.Vector3(CASTLE.x + lx * c + lz * sn, y, CASTLE.z - lx * sn + lz * c));
+  });
   [BOUNDS.x0, BOUNDS.x1].forEach(x => corners.push(new T.Vector3(x, 4.5, BOUNDS.z0)));
   const center = new T.Vector3((BOUNDS.x0 + BOUNDS.x1) / 2, 0, (BOUNDS.z0 + BOUNDS.z1) / 2);
 
@@ -1109,7 +1172,7 @@ const World = (() => {
   return {
     init, loadMap, resize, render, sync, project, pickSlot, pickHero, setTime, focusOn, focusing, portraitOf,
     get slots() { return slots; }, get pathLength() { return pathLength; }, get mapId() { return mapId; }, get night() { return env.night; },
-    pathAt, CASTLE, castleTop, heroSpot,
+    pathAt, CASTLE, castleTop, heroSpot, GATE, setGate, gateHit, gateShot, setTitleCam,
     heroShoot, heroCast, heroUlt, heroMuzzle,
     addEnemy, removeEnemy, clearEnemies, enemyHeadY, enemyCenterY,
     addTower, removeTower, upgradeTower, clearTowers, muzzle,

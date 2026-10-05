@@ -256,24 +256,42 @@ const Models = (() => {
     rim.rotation.y = -Math.PI / 2; rim.position.set(gx0 - 0.03, wy + ah, 0); g.add(rim);
     [-1, 1].forEach(sd => g.add(part(G.box, mat('#e4dccd'), 0.12, ah, 0.22, gx0 - 0.03, wy + ah / 2, sd * (aw + 0.08))));
     g.add(part(G.box, gold, 0.12, 0.2, 0.2, gx0 - 0.05, wy + ah + aw + 0.12, 0)); // 쐐기돌
-    // 내려온 쇠창살 (위쪽 절반)
-    for (let i = -3; i <= 3; i++) g.add(part(G.box, iron, 0.05, ah * 0.75, 0.05, gx0 - 0.05, wy + ah + aw * 0.4 - ah * 0.37, i * 0.2));
-    for (let j = 0; j < 3; j++) g.add(part(G.box, iron, 0.05, 0.05, aw * 1.9, gx0 - 0.05, wy + ah * 0.75 + j * 0.32, 0));
-    // 도개교 (나무 다리) + 쇠사슬
+    // 쇠창살 (위에서 내려오는 격자문) - 그룹 원점이 아치 꼭대기, y 크기로 열림/닫힘
+    const portcullis = new T.Group();
+    portcullis.position.set(gx0 - 0.05, wy + ah + aw, 0);
+    for (let i = -3; i <= 3; i++) {
+      const z = i * 0.2, topOff = aw - Math.sqrt(Math.max(0, aw * aw - z * z)); // 아치 곡선에 맞춘 시작 높이
+      const len = ah + aw - topOff;
+      const bar = part(G.box, iron, 0.05, len, 0.05, 0, -topOff - len / 2, z);
+      portcullis.add(bar);
+      portcullis.add(part(G.cone4, iron, 0.05, 0.12, 0.05, 0, -ah - aw - 0.04, z).rotateZ(Math.PI)); // 끝 송곳
+    }
+    for (let j = 0; j < 4; j++) portcullis.add(part(G.box, iron, 0.05, 0.05, aw * 1.9, 0, -0.45 - j * 0.42, 0));
+    g.add(portcullis);
+    // 도개교 (나무 다리) - 닫히면 들어 올려져 성문을 막음
     const bridge = new T.Group();
-    for (let i = 0; i < 6; i++) bridge.add(part(G.box, i % 2 ? wood : wood2, 0.22, 0.1, aw * 2.1, -i * 0.23, 0, 0));
-    bridge.add(part(G.box, iron, 1.4, 0.05, 0.06, -0.58, 0.07, aw * 1.0));
-    bridge.add(part(G.box, iron, 1.4, 0.05, 0.06, -0.58, 0.07, -aw * 1.0));
-    bridge.position.set(gx0 - 0.15, wy - 0.25, 0);
-    bridge.rotation.z = 0.12;
+    for (let i = 0; i < 6; i++) bridge.add(part(G.box, i % 2 ? wood : wood2, 0.22, 0.1, aw * 2.1, -0.11 - i * 0.23, 0, 0));
+    bridge.add(part(G.box, iron, 1.4, 0.05, 0.06, -0.69, 0.07, aw * 1.0));
+    bridge.add(part(G.box, iron, 1.4, 0.05, 0.06, -0.69, 0.07, -aw * 1.0));
+    bridge.position.set(gx0 - 0.15, wy - 0.22, 0);
     g.add(bridge);
-    [-1, 1].forEach(sd => {
-      // 성문 위에서 다리 끝까지 내려오는 쇠사슬
-      const sx = gx0 - 0.08, sy = wy + ah + aw * 0.9, ex = gx0 - 1.45, ey = wy - 0.32;
-      const len = Math.hypot(ex - sx, ey - sy);
-      const ch = part(G.cyl6, iron, 0.022, len, 0.022, (sx + ex) / 2, (sy + ey) / 2, sd * aw);
-      ch.rotation.z = Math.atan2(-(ex - sx), ey - sy); g.add(ch);
-    });
+    const chains = [-1, 1].map(sd => { const ch = part(G.cyl6, iron, 0.022, 1, 0.022, 0, 0, sd * aw); g.add(ch); return ch; });
+    // k: 0 = 열림(다리 내려가고 창살 올라감), 1 = 닫힘
+    function updateGate(k) {
+      portcullis.scale.y = 0.16 + 0.84 * k;
+      const th = 0.1 + (-1.42 - 0.1) * k;
+      bridge.rotation.z = th;
+      const px = bridge.position.x, py = bridge.position.y;
+      const ex = px - 1.38 * Math.cos(th) - 0.05 * Math.sin(th), ey = py - 1.38 * Math.sin(th) + 0.05 * Math.cos(th);
+      const sx = gx0 - 0.08, sy = wy + ah + aw * 0.95;
+      const len = Math.max(0.05, Math.hypot(ex - sx, ey - sy));
+      chains.forEach(ch => {
+        ch.position.set((sx + ex) / 2, (sy + ey) / 2, ch.position.z);
+        ch.scale.y = len;
+        ch.rotation.z = Math.atan2(-(ex - sx), ey - sy);
+      });
+    }
+    updateGate(0);
     // 성문 위 큰 문장 + 늘어진 깃발(배너)
     const bigCrest = crest(0.9); bigCrest.position.set(gx0 - 0.08, wy + gh - 0.75, 0); g.add(bigCrest);
     [-1, 1].forEach(sd => {
@@ -341,7 +359,7 @@ const Models = (() => {
     [[x0 - 0.1, wy + wh + 0.3, -1.9], [x0 - 0.1, wy + wh + 0.3, 1.9]].forEach(([x, y, z]) => { const t = torch(x, y, z, 1.1); g.add(t); torches.push(t); });
 
     shadowAll(g);
-    g.userData = { flags, torches, win };
+    g.userData = { flags, torches, win, updateGate, gateLocal: new T.Vector3(gx0 - 0.3, wy + 1.0, 0) };
     return g;
   }
   // 깃대 + 펄럭이는 깃발 (world.js가 흔들어 줌)

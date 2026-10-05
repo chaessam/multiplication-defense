@@ -366,6 +366,11 @@ const Sound = (() => {
     pick() { bell(784, 0.1, 0, 0.4); bell(1175, 0.1, 0.08, 0.5); bell(1568, 0.08, 0.16, 0.6); },
     star(i = 0) { bell(1046 * Math.pow(1.26, i), 0.12, 0, 0.6); },
     achieve() { [784, 988, 1175, 1568].forEach((f, i) => bell(f, 0.1, i * 0.09, 0.9)); },
+    gate() { // 쇠창살이 내려오고 다리가 올라가며 쿵
+      for (let i = 0; i < 6; i++) noise(0.05, 0.1, 2600 + i * 200, 'bandpass', i * 0.05, 4);
+      tone('sine', 110, 40, 0.5, 0.5, 0.32); noise(0.4, 0.3, 500, 'lowpass', 0.32);
+    },
+    gateOpen() { for (let i = 0; i < 10; i++) noise(0.04, 0.07, 2200 + (i % 3) * 400, 'bandpass', i * 0.08, 5); tone('triangle', 220, 330, 0.8, 0.05); },
     cut() { noise(0.4, 0.25, 1200, 'bandpass', 0, 0.5); tone('sawtooth', 60, 40, 0.9, 0.25); },
   };
   function kickSfx(delay) {
