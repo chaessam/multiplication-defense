@@ -555,6 +555,23 @@ const Models = (() => {
     orcking: { skin: '#5aa046', armor: '#3b2b22', legs: '#3f7a30', helm: 'horn', weapon: 'axe', bulk: true, tusk: true, eye: '#f33', cape: '#b3261e' },
     demonking: { skin: '#8a2333', armor: '#2b2236', legs: '#1c1724', helm: 'demon', weapon: 'greatsword', bulk: true, eye: '#ff3b2f', cape: '#7a0f1f', spikes: true },
     hero:    { skin: '#f2c39c', armor: '#3f6fd8', legs: '#2a4a9a', helm: 'hero', weapon: 'crossbow', cape: '#e5483b', belt: '#f4c247', shield: null, hero: true },
+    // ---- 사막 ----
+    sandthief: { skin: '#c98b5a', armor: '#e9d8a6', legs: '#7a5a3a', helm: 'turban', weapon: 'scimitar', ears: true, eye: '#ffde3a', belt: '#b3261e', scarf: '#2f8f9a' },
+    mummy:     { skin: '#e3d8b8', armor: '#d6c9a2', legs: '#cbbd94', helm: 'nemes', weapon: 'spear', tip: '#f4c247', eye: '#5fffd0', wraps: true, belt: '#f4c247' },
+    minotaur:  { skin: '#7a4a2e', armor: '#b3261e', legs: '#5a3420', helm: 'bull', weapon: 'axe', bulk: true, eye: '#ff3b2f', belt: '#f4c247', ring: true },
+    sandgolem: { skin: '#d6a866', armor: '#c08a4e', legs: '#b07a44', weapon: 'fists', bulk: true, golem: '#e8c47e', eye: '#5fd3ff', crack: '#5fd3ff' },
+    // ---- 설원 ----
+    snowgob:   { skin: '#8fd0c8', armor: '#f2f6fa', legs: '#5a7a8a', helm: 'furhat', weapon: 'icicle', ears: true, eye: '#ffde3a' },
+    frostbone: { skin: '#e8f1f8', armor: '#3a5a7a', legs: '#e8f1f8', helm: 'crownice', weapon: 'spear', tip: '#9fe6ff', eye: '#7fd8ff', skeleton: true, thin: true },
+    frostknight: { skin: '#cfe6f5', armor: '#bfe6ff', legs: '#7fa6c6', helm: 'knight', helmCol: '#d8f1ff', plume: '#5fd3ff', weapon: 'sword', blade: '#9fe6ff', shield: '#3f86c6', eye: '#7fd8ff', iceSpikes: true },
+    yeti:      { skin: '#f4f8fb', armor: '#e2ebf3', legs: '#e8eff5', weapon: 'icicle', bulk: true, tusk: true, eye: '#3f86c6', face: '#8fb4d0', fur: true },
+    icegolem:  { skin: '#a9d8f0', armor: '#7fbbe0', legs: '#8cc4e6', weapon: 'fists', bulk: true, golem: '#dff5ff', eye: '#ffffff', crack: '#5fd3ff', crystals: true },
+    // ---- 화산 ----
+    fireimp:   { skin: '#e2452f', armor: '#5a2420', legs: '#7a2a20', helm: 'imp', weapon: 'trident', ears: true, eye: '#ffde3a', wings: '#7a1f1a', tail: true },
+    ashbone:   { skin: '#d8ccb4', armor: '#2a1f1c', legs: '#d8ccb4', helm: 'cap', helmCol: '#3a2c28', weapon: 'sword', blade: '#ff7a2a', eye: '#ff6a1a', skeleton: true, thin: true, shield: '#4a2a22' },
+    obsidian:  { skin: '#3a2c30', armor: '#2a2430', legs: '#1f1a24', helm: 'knight', helmCol: '#3a3040', plume: '#ff6a1a', weapon: 'sword', blade: '#ff5a1a', shield: '#3a2030', eye: '#ff6a1a', crack: '#ff6a1a' },
+    firedemon: { skin: '#9a2a1e', armor: '#3a1a16', legs: '#6a1c14', helm: 'horn', helmCol: '#2a1a16', weapon: 'flameaxe', bulk: true, tusk: true, eye: '#ffde3a', flames: true },
+    lavagolem: { skin: '#3d302c', armor: '#2e2422', legs: '#35292a', weapon: 'fists', bulk: true, golem: '#4a3a36', eye: '#ffb030', crack: '#ff6a1a' },
   };
 
   function buildHumanoid(L) {
@@ -571,28 +588,93 @@ const Models = (() => {
     if (bulk) body.add(part(G.ico1, mat(L.armor), 0.62, 0.58, 0.6, 0, 0.98, 0));
     else body.add(part(G.cyl6, mat(L.armor), 0.37, 0.64, 0.37, 0, 0.88, 0));
     if (bulk) body.add(part(G.ico1, mat(L.skin), 0.5, 0.42, 0.52, 0.06, 1.25, 0));
-    if (L.belt) body.add(part(G.cyl6, mat(L.belt), 0.39, 0.1, 0.39, 0, 0.64, 0));
+    if (L.belt) body.add(part(G.cyl6, mat(L.belt), bulk ? 0.6 : 0.39, 0.1, bulk ? 0.6 : 0.39, 0, bulk ? 0.72 : 0.64, 0));
+    const gold = mat('#f4c247', { metalness: 0.55, roughness: 0.3 });
+    const silver = mat('#e8eef5', { metalness: 0.55, roughness: 0.3 });
     if (L.hero) {
-      // 영웅 가슴 문장
-      body.add(part(G.oct, mat('#f4c247', { metalness: 0.5, roughness: 0.35 }), 0.06, 0.14, 0.12, 0.36, 0.95, 0));
-      body.add(part(G.cyl6, mat('#e8eef5', { metalness: 0.5, roughness: 0.35 }), 0.42, 0.14, 0.42, 0, 1.12, 0));
+      // 영웅: 은빛 흉갑 + 금빛 문장 + 허리 망토 자락
+      body.add(part(G.cyl6, silver, 0.42, 0.34, 0.42, 0, 1.0, 0));
+      body.add(part(G.oct, gold, 0.07, 0.17, 0.15, 0.4, 1.0, 0));
+      body.add(part(G.oct, glow('#5fd3ff', 1.2), 0.04, 0.07, 0.06, 0.45, 1.0, 0));
+      body.add(part(G.box, mat('#2a4a9a'), 0.1, 0.32, 0.36, 0.3, 0.45, 0));
+      body.add(part(G.box, gold, 0.11, 0.05, 0.37, 0.31, 0.31, 0));
     }
-    if (L.cape) { const cp = part(G.box, mat(L.cape), 0.08, 1.0, 1.0, -0.5, 1.05, 0); cp.rotation.z = -0.15; body.add(cp); g.userData.cape = cp; }
+    if (L.cape) {
+      const cp = new T.Group(); cp.position.set(bulk ? -0.58 : -0.36, bulk ? 1.5 : 1.28, 0); cp.rotation.z = -0.15; body.add(cp);
+      const big = L.hero ? 1.25 : 1;
+      cp.add(part(G.box, mat(L.cape), 0.07, 1.15 * big, 1.0 * big, -0.06, -0.55 * big, 0));
+      if (L.hero) {
+        cp.add(part(G.box, gold, 0.08, 0.07, 1.27, -0.06, -1.35, 0));
+        cp.add(part(G.box, mat('#f6eedb'), 0.08, 0.3, 0.3, -0.08, -0.55, 0));
+        cp.add(part(G.oct, gold, 0.06, 0.12, 0.12, -0.12, -0.55, 0));
+      }
+      g.userData.cape = cp;
+    }
+    if (L.wraps) for (let i = 0; i < 5; i++) { const w = part(G.cyl6, mat('#b9ab84'), 0.385, 0.035, 0.385, 0, 0.62 + i * 0.13, 0); w.rotation.x = (i % 2 ? 0.18 : -0.18); body.add(w); }
+    if (L.skeleton) {
+      body.add(part(G.box, mat(L.skin), 0.14, 0.62, 0.1, 0.12, 0.9, 0));
+      for (let i = 0; i < 3; i++) body.add(part(G.box, mat(L.skin), 0.3, 0.05, 0.42, 0.06, 0.78 + i * 0.13, 0));
+    }
+    if (L.scarf) { body.add(part(G.cyl6, mat(L.scarf), 0.3, 0.12, 0.3, 0, 1.23, 0)); const tl = part(G.box, mat(L.scarf), 0.06, 0.4, 0.14, -0.28, 1.05, 0.1); tl.rotation.z = 0.3; body.add(tl); }
+    if (L.ring) body.add(part(G.torus, gold, 0.07, 0.07, 0.07, 0.36, 1.58, 0).rotateY(Math.PI / 2));
+    if (L.fur) for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI * 2; body.add(part(G.cone4, mat(L.armor), 0.12, 0.3, 0.12, Math.cos(a) * 0.5, 1.45, Math.sin(a) * 0.5)); }
+    if (L.golem) {
+      // 바위 몸: 울퉁불퉁한 덩어리 + 빛나는 틈
+      const rock = mat(L.golem);
+      [[0.35, 1.0, 0.35, 0.3], [-0.3, 1.1, -0.35, 0.28], [0.1, 0.75, -0.5, 0.22], [-0.2, 1.4, 0.4, 0.24]].forEach(([x, y, z, r]) => body.add(part(G.ico, rock, r, r, r, x, y, z)));
+      if (L.crack) [[0.55, 1.05, 0.15], [0.58, 0.9, -0.2], [0.5, 1.25, -0.05]].forEach(([x, y, z]) => body.add(part(G.box, glow(L.crack, 1.2), 0.04, 0.22, 0.06, x, y, z).rotateX(0.6)));
+      if (L.crystals) [[-0.1, 1.85, 0.3], [-0.2, 1.9, -0.25], [-0.35, 1.7, 0]].forEach(([x, y, z], i) => { const c = part(G.oct, mat('#e6fbff', { emissive: '#7fd8ff', emissiveIntensity: 0.6, roughness: 0.2 }), 0.12, 0.38, 0.12, x, y, z); c.rotation.z = -0.3 + i * 0.2; body.add(c); });
+    }
+    if (L.crack && !L.golem) [-0.12, 0.12].forEach(z => body.add(part(G.box, glow(L.crack, 1.1), 0.04, 0.5, 0.04, 0.37, 0.88, z)));
+    if (L.flames) for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2; body.add(part(G.cone6, glow(i % 2 ? '#ffb030' : '#ff5a1a', 1.2), 0.1, 0.38, 0.1, Math.cos(a) * 0.2, 2.02, Math.sin(a) * 0.2)); }
+    if (L.wings) [-1, 1].forEach(sd => { const w = part(G.cone4, mat(L.wings, { side: T.DoubleSide }), 0.06, 0.6, 0.45, -0.32, 1.2, sd * 0.32); w.rotation.x = sd * -0.9; body.add(w); });
+    if (L.tail) { const t = part(G.cyl6, mat(L.skin), 0.04, 0.7, 0.04, -0.4, 0.55, 0); t.rotation.z = 0.9; body.add(t); body.add(part(G.cone4, mat(L.skin), 0.08, 0.16, 0.08, -0.68, 0.36, 0).rotateZ(2.4)); }
+    if (L.iceSpikes) [-1, 1].forEach(sd => [0, 1].forEach(i => body.add(part(G.oct, mat('#e6fbff', { emissive: '#7fd8ff', emissiveIntensity: 0.5 }), 0.06, 0.22, 0.06, -0.05 + i * 0.12, 1.36, sd * 0.45))));
     const headY = bulk ? 1.65 : 1.42;
     body.add(part(G.ico1, mat(L.skin), 0.3, 0.3, 0.3, 0.02, headY, 0));
+    if (L.face) body.add(part(G.box, mat(L.face), 0.08, 0.26, 0.36, 0.25, headY - 0.02, 0));
+    if (L.skeleton) body.add(part(G.box, mat('#1d1d1d'), 0.04, 0.05, 0.16, 0.3, headY - 0.13, 0));
     const eyeM = L.eye ? glow(L.eye) : mat('#1d1d1d');
     [-0.1, 0.1].forEach(z => body.add(part(G.box, eyeM, 0.05, 0.07, 0.06, 0.29, headY + 0.03, z)));
     if (L.ears) [-1, 1].forEach(s => { const e = part(G.cone4, mat(L.skin), 0.09, 0.32, 0.09, -0.02, headY + 0.08, s * 0.32); e.rotation.x = s * -1.3; body.add(e); });
     if (L.tusk) [-0.1, 0.1].forEach(z => body.add(part(G.cone4, mat('#f7f0dc'), 0.04, 0.14, 0.04, 0.27, headY - 0.1, z)));
     if (L.helm === 'cap') {
-      body.add(part(G.halfSphere, mat('#aeb5bf', { metalness: 0.3, roughness: 0.5 }), 0.33, 0.3, 0.33, 0.02, headY + 0.04, 0));
-      body.add(part(G.cyl8, mat('#8e96a2'), 0.36, 0.04, 0.36, 0.02, headY + 0.04, 0));
+      body.add(part(G.halfSphere, mat(L.helmCol || '#aeb5bf', { metalness: 0.3, roughness: 0.5 }), 0.33, 0.3, 0.33, 0.02, headY + 0.04, 0));
+      body.add(part(G.cyl8, mat(L.helmCol || '#8e96a2'), 0.36, 0.04, 0.36, 0.02, headY + 0.04, 0));
+    } else if (L.helm === 'turban') {
+      body.add(part(G.ico1, mat('#f2ead6'), 0.34, 0.24, 0.34, 0, headY + 0.16, 0));
+      body.add(part(G.oct, glow('#e5483b', 0.6), 0.05, 0.07, 0.05, 0.33, headY + 0.18, 0));
+      body.add(part(G.box, mat(L.scarf || '#2f8f9a'), 0.06, 0.12, 0.34, 0.28, headY - 0.12, 0));
+    } else if (L.helm === 'nemes') {
+      // 파라오 두건 (금·청 줄무늬)
+      body.add(part(G.halfSphere, mat('#f4c247', { metalness: 0.4, roughness: 0.4 }), 0.34, 0.3, 0.34, 0.0, headY + 0.03, 0));
+      [-1, 1].forEach(sd => {
+        body.add(part(G.box, mat('#2d4f98'), 0.12, 0.4, 0.14, 0.02, headY - 0.22, sd * 0.3));
+        body.add(part(G.box, mat('#f4c247'), 0.125, 0.06, 0.145, 0.02, headY - 0.12, sd * 0.3));
+        body.add(part(G.box, mat('#f4c247'), 0.125, 0.06, 0.145, 0.02, headY - 0.3, sd * 0.3));
+      });
+      body.add(part(G.cone4, glow('#5fffd0', 0.6), 0.05, 0.14, 0.05, 0.32, headY + 0.28, 0));
+    } else if (L.helm === 'furhat') {
+      body.add(part(G.cyl8, mat('#f2f6fa'), 0.34, 0.12, 0.34, 0.02, headY + 0.12, 0));
+      body.add(part(G.halfSphere, mat('#3f86c6'), 0.3, 0.32, 0.3, 0.02, headY + 0.16, 0));
+      body.add(part(G.ico1, mat('#f2f6fa'), 0.1, 0.1, 0.1, -0.02, headY + 0.5, 0));
+    } else if (L.helm === 'crownice') {
+      const ice = mat('#e6fbff', { emissive: '#7fd8ff', emissiveIntensity: 0.6, roughness: 0.2 });
+      for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2; body.add(part(G.oct, ice, 0.05, 0.18, 0.05, 0.02 + Math.cos(a) * 0.24, headY + 0.3, Math.sin(a) * 0.24)); }
+    } else if (L.helm === 'imp') {
+      [-1, 1].forEach(sd => { const h = part(G.cone6, mat('#2a1a16'), 0.07, 0.3, 0.07, 0, headY + 0.3, sd * 0.16); h.rotation.x = sd * -0.4; body.add(h); });
+    } else if (L.helm === 'bull') {
+      body.add(part(G.box, mat('#5a3420'), 0.3, 0.22, 0.3, 0.27, headY - 0.06, 0));
+      [-1, 1].forEach(sd => {
+        const h1 = part(G.cone6, mat('#efe5cb'), 0.09, 0.5, 0.09, 0.05, headY + 0.24, sd * 0.38); h1.rotation.x = sd * -1.3; body.add(h1);
+        const h2 = part(G.cone6, mat('#efe5cb'), 0.06, 0.3, 0.06, 0.05, headY + 0.42, sd * 0.6); body.add(h2);
+      });
     } else if (L.helm === 'knight') {
-      body.add(part(G.cyl8, mat('#c3cad4', { metalness: 0.4, roughness: 0.45 }), 0.33, 0.42, 0.33, 0.02, headY + 0.04, 0));
+      body.add(part(G.cyl8, mat(L.helmCol || '#c3cad4', { metalness: 0.4, roughness: 0.45 }), 0.33, 0.42, 0.33, 0.02, headY + 0.04, 0));
       body.add(part(G.box, mat('#222'), 0.04, 0.05, 0.36, 0.34, headY + 0.04, 0));
       body.add(part(G.box, mat(L.plume), 0.5, 0.18, 0.08, -0.08, headY + 0.32, 0));
     } else if (L.helm === 'horn') {
-      body.add(part(G.halfSphere, mat('#5b5148'), 0.33, 0.3, 0.33, 0.02, headY + 0.04, 0));
+      body.add(part(G.halfSphere, mat(L.helmCol || '#5b5148'), 0.33, 0.3, 0.33, 0.02, headY + 0.04, 0));
       [-1, 1].forEach(s => { const h = part(G.cone6, mat('#efe5cb'), 0.08, 0.42, 0.08, 0, headY + 0.3, s * 0.3); h.rotation.x = s * -0.6; body.add(h); });
     } else if (L.helm === 'demon') {
       const gold = mat('#f4c247', { metalness: 0.5, roughness: 0.35 });
@@ -604,26 +686,49 @@ const Models = (() => {
         const h2 = part(G.cone6, mat('#e8dcc0'), 0.07, 0.4, 0.07, -0.1, headY + 0.62, sd * 0.55); h2.rotation.x = sd * -0.2; h2.rotation.z = 0.4; body.add(h2);
       });
     } else if (L.helm === 'hero') {
-      // 영웅: 금빛 머리카락 + 은빛 서클릿
+      // 영웅: 금빛 머리카락 + 날개 달린 은빛 투구 + 푸른 보석
       body.add(part(G.halfSphere, mat('#f4c247'), 0.33, 0.32, 0.34, -0.03, headY + 0.03, 0));
-      body.add(part(G.box, mat('#f4c247'), 0.2, 0.28, 0.5, -0.2, headY - 0.12, 0));
-      body.add(part(G.cyl8, mat('#e8eef5', { metalness: 0.6, roughness: 0.3 }), 0.33, 0.06, 0.33, 0.02, headY + 0.12, 0));
-      body.add(part(G.oct, glow('#5fd3ff'), 0.06, 0.09, 0.04, 0.33, headY + 0.13, 0));
+      body.add(part(G.box, mat('#f4c247'), 0.22, 0.34, 0.52, -0.2, headY - 0.14, 0));
+      body.add(part(G.halfSphere, silver, 0.34, 0.26, 0.35, 0.0, headY + 0.1, 0));
+      body.add(part(G.cyl8, gold, 0.35, 0.07, 0.36, 0.0, headY + 0.11, 0));
+      body.add(part(G.box, silver, 0.36, 0.06, 0.06, 0.08, headY + 0.36, 0));
+      body.add(part(G.oct, glow('#5fd3ff', 1.3), 0.07, 0.11, 0.05, 0.35, headY + 0.13, 0));
+      [-1, 1].forEach(sd => {
+        // 투구 날개
+        const wg = new T.Group(); wg.position.set(-0.05, headY + 0.2, sd * 0.34); wg.rotation.x = sd * -0.5; body.add(wg);
+        [0, 1, 2].forEach(i => { const f = part(G.box, i ? silver : gold, 0.3 - i * 0.06, 0.07, 0.04, -0.08 - i * 0.05, 0.08 + i * 0.09, 0); f.rotation.z = 0.5 + i * 0.15; wg.add(f); });
+      });
     }
-    const armGeo = new T.BoxGeometry(bulk ? 0.24 : 0.17, 0.55, bulk ? 0.24 : 0.17); armGeo.translate(0, -0.27, 0);
+    const aw = bulk ? 0.24 : L.thin ? 0.1 : 0.17;
+    const armGeo = new T.BoxGeometry(aw, 0.55, aw); armGeo.translate(0, -0.27, 0);
     const shoulderY = bulk ? 1.32 : 1.13, sz = bulk ? 0.6 : 0.43;
     const armR = new T.Group(); armR.position.set(0, shoulderY, sz); body.add(armR);
-    armR.add(mesh(armGeo, mat(bulk ? L.skin : L.armor)));
+    armR.add(mesh(armGeo, mat(bulk || L.thin ? L.skin : L.armor)));
     const armL = new T.Group(); armL.position.set(0, shoulderY, -sz); body.add(armL);
-    armL.add(mesh(armGeo, mat(bulk ? L.skin : L.armor)));
+    armL.add(mesh(armGeo, mat(bulk || L.thin ? L.skin : L.armor)));
     const hand = new T.Group(); hand.position.set(0.05, -0.52, 0); armR.add(hand);
     const woodM = mat('#7a5233');
     if (L.weapon === 'spear') {
       const sp = part(G.cyl6, woodM, 0.035, 1.9, 0.035, 0.1, 0.35, 0); sp.rotation.z = -0.25; hand.add(sp);
-      const tip = part(G.cone4, mat('#d8dde4', { metalness: 0.5, roughness: 0.4 }), 0.08, 0.26, 0.08, 0.36, 1.3, 0); tip.rotation.z = -0.25; hand.add(tip);
+      const tip = part(G.cone4, L.tip ? glow(L.tip, 0.7) : mat('#d8dde4', { metalness: 0.5, roughness: 0.4 }), 0.08, 0.26, 0.08, 0.36, 1.3, 0); tip.rotation.z = -0.25; hand.add(tip);
     } else if (L.weapon === 'sword') {
-      const bl = part(G.box, mat('#e2e6ec', { metalness: 0.6, roughness: 0.3 }), 0.07, 0.8, 0.03, 0.2, 0.4, 0); bl.rotation.z = -0.5; hand.add(bl);
+      const bl = part(G.box, L.blade ? glow(L.blade, 0.8) : mat('#e2e6ec', { metalness: 0.6, roughness: 0.3 }), 0.07, 0.8, 0.03, 0.2, 0.4, 0); bl.rotation.z = -0.5; hand.add(bl);
       hand.add(part(G.box, mat('#f4c247'), 0.08, 0.06, 0.25, 0.03, 0.06, 0));
+    } else if (L.weapon === 'scimitar') {
+      const bl = part(G.box, mat('#e2e6ec', { metalness: 0.6, roughness: 0.3 }), 0.09, 0.55, 0.03, 0.15, 0.3, 0); bl.rotation.z = -0.4; hand.add(bl);
+      const cv = part(G.box, mat('#e2e6ec', { metalness: 0.6, roughness: 0.3 }), 0.12, 0.25, 0.03, 0.34, 0.58, 0); cv.rotation.z = -0.9; hand.add(cv);
+      hand.add(part(G.box, mat('#f4c247'), 0.06, 0.05, 0.18, 0.03, 0.04, 0));
+    } else if (L.weapon === 'icicle') {
+      const ic = part(G.cone6, mat('#e6fbff', { emissive: '#7fd8ff', emissiveIntensity: 0.5, roughness: 0.15 }), bulk ? 0.16 : 0.07, bulk ? 1.2 : 0.55, bulk ? 0.16 : 0.07, 0.2, bulk ? 0.55 : 0.28, 0); ic.rotation.z = -0.4; hand.add(ic);
+    } else if (L.weapon === 'trident') {
+      const sp = part(G.cyl6, mat('#2a1a16'), 0.03, 1.5, 0.03, 0.08, 0.3, 0); sp.rotation.z = -0.25; hand.add(sp);
+      [-0.08, 0, 0.08].forEach(z => { const t = part(G.cone4, glow('#ffb030', 0.8), 0.04, 0.24, 0.04, 0.3, 1.08, z); t.rotation.z = -0.25; hand.add(t); });
+    } else if (L.weapon === 'flameaxe') {
+      const h = part(G.cyl6, mat('#2a1a16'), 0.05, 1.4, 0.05, 0.1, 0.55, 0); h.rotation.z = -0.2; hand.add(h);
+      hand.add(part(G.box, mat('#3a2c28', { metalness: 0.4 }), 0.55, 0.4, 0.06, 0.38, 1.1, 0));
+      hand.add(part(G.box, glow('#ff6a1a', 1.2), 0.5, 0.06, 0.07, 0.42, 1.31, 0));
+    } else if (L.weapon === 'fists') {
+      hand.add(part(G.ico, mat(L.golem || L.skin), 0.24, 0.24, 0.24, 0.05, -0.05, 0));
     } else if (L.weapon === 'dagger') {
       const bl = part(G.box, mat('#d8dde4'), 0.05, 0.36, 0.03, 0.08, 0.18, 0); bl.rotation.z = -0.6; hand.add(bl);
     } else if (L.weapon === 'club') {
@@ -654,8 +759,17 @@ const Models = (() => {
       });
     }
     if (L.hero) {
-      // 어깨 갑옷
-      [-1, 1].forEach(sd => body.add(part(G.halfSphere, mat('#e8eef5', { metalness: 0.5, roughness: 0.35 }), 0.17, 0.14, 0.17, 0, shoulderY + 0.02, sd * sz)));
+      // 겹친 어깨 갑옷 + 등에 멘 대검
+      [-1, 1].forEach(sd => {
+        body.add(part(G.halfSphere, silver, 0.22, 0.17, 0.22, 0, shoulderY + 0.02, sd * sz));
+        body.add(part(G.cyl8, gold, 0.225, 0.04, 0.225, 0, shoulderY + 0.02, sd * sz));
+        body.add(part(G.cone4, gold, 0.04, 0.16, 0.04, -0.02, shoulderY + 0.22, sd * (sz + 0.02)));
+      });
+      const sw = new T.Group(); sw.position.set(-0.32, 1.15, 0); sw.rotation.x = 0.6; body.add(sw);
+      sw.add(part(G.box, mat('#cfe7ff', { emissive: '#5fd3ff', emissiveIntensity: 0.35, metalness: 0.5, roughness: 0.25 }), 0.05, 1.05, 0.12, 0, 0.1, 0));
+      sw.add(part(G.box, gold, 0.07, 0.07, 0.36, 0, -0.45, 0));
+      sw.add(part(G.box, mat('#5a3a22'), 0.06, 0.22, 0.06, 0, -0.6, 0));
+      sw.add(part(G.oct, glow('#5fd3ff', 1.2), 0.06, 0.06, 0.06, 0, -0.73, 0));
     }
     if (L.shield) {
       const sh = part(G.cyl8, mat(L.shield), 0.3, 0.07, 0.3, 0.1, -0.3, -0.1);
@@ -718,10 +832,47 @@ const Models = (() => {
     return g;
   }
 
+  // 사막의 거대 전갈 (기사 역할: 단단한 껍질)
+  function buildScorpion() {
+    const g = new T.Group();
+    const body = new T.Group(); g.add(body);
+    const shell = mat('#3a2a3e', { metalness: 0.25, roughness: 0.5 }), shell2 = mat('#5a3e5a', { metalness: 0.25, roughness: 0.5 });
+    body.add(part(G.ico1, shell, 0.6, 0.28, 0.42, 0, 0.5, 0));
+    body.add(part(G.ico1, shell2, 0.32, 0.22, 0.32, 0.5, 0.52, 0));
+    [-0.1, 0.1].forEach(z => body.add(part(G.box, glow('#ff3b2f'), 0.05, 0.05, 0.05, 0.78, 0.6, z)));
+    const legs = [];
+    for (let i = 0; i < 4; i++) [-1, 1].forEach(sd => {
+      const lg = new T.Group(); lg.position.set(0.25 - i * 0.2, 0.48, sd * 0.32); body.add(lg);
+      const a = part(G.box, shell2, 0.07, 0.07, 0.45, 0, 0.05, sd * 0.2); a.rotation.x = sd * 0.5; lg.add(a);
+      lg.add(part(G.box, shell2, 0.06, 0.45, 0.06, 0, -0.18, sd * 0.42));
+      legs.push(lg);
+    });
+    const claws = [-1, 1].map(sd => {
+      const c = new T.Group(); c.position.set(0.6, 0.55, sd * 0.3); body.add(c);
+      c.add(part(G.box, shell, 0.45, 0.1, 0.1, 0.2, 0, sd * 0.05));
+      c.add(part(G.ico, shell2, 0.18, 0.12, 0.14, 0.5, 0, sd * 0.05));
+      const p1 = part(G.cone4, shell2, 0.06, 0.28, 0.06, 0.72, 0, sd * 0.1); p1.rotation.z = -Math.PI / 2; c.add(p1);
+      const p2 = part(G.cone4, shell2, 0.05, 0.24, 0.05, 0.7, 0, sd * -0.02); p2.rotation.z = -Math.PI / 2; c.add(p2);
+      return c;
+    });
+    // 꼬리: 마디 5개가 위로 휘어 독침
+    const tail = new T.Group(); tail.position.set(-0.5, 0.55, 0); body.add(tail);
+    let seg = tail;
+    for (let i = 0; i < 5; i++) {
+      const s = new T.Group(); s.position.set(i ? -0.22 : 0, i ? 0.04 : 0, 0); s.rotation.z = -0.45; seg.add(s);
+      s.add(part(G.ico, i % 2 ? shell2 : shell, 0.15 - i * 0.012, 0.13 - i * 0.01, 0.15 - i * 0.012, -0.1, 0, 0));
+      seg = s;
+    }
+    const sting = part(G.cone4, glow('#b7ff3a', 0.9), 0.07, 0.26, 0.07, -0.22, 0.02, 0); sting.rotation.z = Math.PI / 2 + 0.5; seg.add(sting);
+    Object.assign(g.userData, { body, legs, claws, tail, height: 1.3, crawl: true });
+    return g;
+  }
+
   function buildEnemy(type) {
     let g;
     if (type === 'dragon') g = buildDragon();
     else if (type === 'lich') g = buildLich();
+    else if (type === 'scorpion') g = buildScorpion();
     else g = buildHumanoid(LOOKS[type]);
     g.traverse(o => { if (o.isMesh) o.castShadow = true; });
     return g;

@@ -5,7 +5,7 @@
   'use strict';
   Icons.mount();
   const I = Icons.html;
-  const { TOWERS, LV_DMG, LV_RATE, LV_RANGE, ENEMIES, BOSS_ORDER, FINAL_WAVE, HERO, DIFFS, MAPS, MAP_ORDER, CARDS, RARITY, ACH, TIERS, UPGRADES } = GD;
+  const { TOWERS, LV_DMG, LV_RATE, LV_RANGE, ENEMIES, ROLES, DEX_ENEMIES, BOSS_ORDER, FINAL_WAVE, HERO, DIFFS, MAPS, MAP_ORDER, CARDS, RARITY, ACH, TIERS, UPGRADES } = GD;
 
   const OLD_SAVE_KEY = 'gugudan-defense-save-v1';
   const SAVE_KEY = 'gugudan-defense-saves'; // 맵마다 따로 저장: { last, maps: { forest: {...}, ... } }
@@ -38,7 +38,7 @@
     time: 0,
   };
   const D = () => DIFFS[S.diff] || DIFFS.normal;
-  const DIFF_ORDER = ['easy', 'normal', 'hard'];
+  const DIFF_ORDER = ['easy', 'normal', 'hard', 'expert'];
   // 기록은 이번 판에서 고른 가장 쉬운 난이도로 남김 (쉬움으로 버티다 어려움으로 바꿔 기록 얻기 방지)
   const easier = (a, b) => DIFF_ORDER.indexOf(a) <= DIFF_ORDER.indexOf(b) ? a : b;
   const MAPD = () => MAPS[S.map] || MAPS.forest;
@@ -124,6 +124,12 @@
 
   // ================= 문제 =================
   function danRange(w) {
+    if (D().big) {
+      // 19단: 11단부터 2웨이브마다 한 단씩, 15웨이브부터 11~19단 모두
+      if (w >= 15) return [11, 19];
+      const max = Math.min(19, 11 + Math.floor((w - 1) / 2));
+      return [Math.max(11, max - 3), max];
+    }
     if (D().allDan) return [2, 9];
     if (S.diff === 'easy') {
       if (w >= 15) return [2, 9];
@@ -138,6 +144,15 @@
     const [lo, hi] = danRange(S.wave);
     for (let tries = 0; tries < 12; tries++) {
       let a;
+      if (D().big) {
+        // 곱하는 수: 처음엔 2~9, 10웨이브부터 점점 11~19도 섞임 (최대 19 × 19)
+        a = isBoss ? randInt(Math.ceil((lo + hi) / 2), hi) : randInt(lo, hi);
+        const bigB = S.wave >= 10 && Math.random() < Math.min(0.4, 0.15 + (S.wave - 10) * 0.02) + (isBoss ? 0.2 : 0);
+        const b = bigB ? randInt(11, 19) : randInt(2, 9);
+        const dup = S.enemies.some(e => e.q && e.q.a === a && e.q.b === b);
+        if (!dup || tries === 11) return { a, b, ans: a * b };
+        continue;
+      }
       if (isBoss) a = randInt(Math.max(lo, Math.ceil((lo + hi) / 2)), hi);
       else if (lo === 2 && hi === 9 && S.diff !== 'easy' && Math.random() < 0.35) a = randInt(6, 9);
       else a = randInt(lo, hi);
@@ -164,6 +179,9 @@
       list.push(type);
     }
     for (let i = 0; i < Math.min(3, list.length); i++) if (ENEMIES[list[i]].probs > 1) list[i] = 'soldier';
+    // 맵 테마에 맞는 모습으로 (능력치는 같음)
+    const themed = MAPD().enemies || {};
+    for (let i = 0; i < list.length; i++) list[i] = themed[list[i]] || list[i];
     if (w === FINAL_WAVE) list.push('demonking');
     else if (w % 5 === 0) list.push(BOSS_ORDER[(w / 5 - 1) % BOSS_ORDER.length]);
     // 적 사이 간격 = 그 적을 쓰러뜨리는 데 필요한 정답 수 × 한 문제에 주어지는 시간
@@ -176,7 +194,8 @@
     q.forEach(x => { if (!ENEMIES[x.type].boss) counts[x.type] = (counts[x.type] || 0) + 1; });
     const [lo, hi] = danRange(w);
     const dan = lo === hi ? `${lo}단` : `${lo}~${hi}단`;
-    const kinds = ['goblin', 'soldier', 'knight', 'ogre', 'troll'].filter(t => counts[t]).map(t => ENEMIES[t].name).join(' · ');
+    const themed = MAPD().enemies || {};
+    const kinds = ROLES.map(r => themed[r] || r).filter(t => counts[t]).map(t => ENEMIES[t].name).join(' · ');
     const boss = q.find(x => ENEMIES[x.type].boss);
     return { dan, kinds, boss: boss ? ENEMIES[boss.type].name : null };
   }
@@ -500,7 +519,8 @@
   function targetable() { return S.enemies.filter(e => !e.dead && e.t > 0.01); }
   function pressDigit(d) {
     if (S.mode !== 'wave' || S.paused) return;
-    if (S.input.length >= 2) S.input = '';
+    const maxLen = D().big ? 3 : 2;
+    if (S.input.length >= maxLen) S.input = '';
     S.input += d;
     Sound.play('key');
     renderAnswer();
@@ -508,7 +528,7 @@
     const answers = targetable().map(e => String(e.q.ans));
     if (!answers.length) return;
     const longer = answers.some(a => a.length > v.length && a.startsWith(v));
-    if (v.length >= 2 || !longer) submit();
+    if (v.length >= maxLen || !longer) submit();
   }
   function pressDel() { S.input = S.input.slice(0, -1); renderAnswer(); }
   function submit() {
@@ -1457,7 +1477,6 @@
   }
 
   // 도감
-  const DEX_ENEMIES = ['soldier', 'goblin', 'knight', 'ogre', 'troll', 'orcking', 'dragon', 'lich', 'demonking'];
   function speedWord(s) { return s >= 1.3 ? '매우 빠름' : s >= 0.95 ? '보통' : s >= 0.6 ? '느림' : '매우 느림'; }
   function openBook(tab = 'enemy') {
     const P = Profile.data;
@@ -1467,6 +1486,7 @@
         const seen = !!P.seen[t], d = ENEMIES[t];
         return `<button class="dexc ${d.boss ? 'boss' : ''} ${seen ? '' : 'lock'}" data-dex="enemy:${t}">
           ${d.boss ? `<span class="badge">${d.final ? '최종' : '보스'}</span>` : ''}
+          ${d.map ? `<span class="badge maptag">${MAPS[d.map].name.split(' ').pop()}</span>` : ''}
           <img src="${World.portraitOf('enemy', t, { dark: !seen })}" alt=""><b>${seen ? d.name : '???'}</b><small>${seen ? `처치 ${P.kills[t] || 0}` : '미발견'}</small></button>`;
       }).join('');
     } else if (tab === 'tower') {
@@ -1568,6 +1588,8 @@
       <ul><li>적을 쓰러뜨리면 보석! 성 수리 · 얼음 폭풍 · 유성 낙하에 써요. 골드로는 대장간에서 영구 강화를 해요.</li></ul>
       <h3>${I('map')} 맵 · 난이도 · 별</h3>
       <ul><li>숲 → 사막 → 설원 → 화산. 앞 맵에서 10웨이브를 넘기면 다음 맵이 열려요. 새 맵은 처음 화면 → 새 게임에서 골라요.</li>
+      <li>맵마다 그 땅에 사는 적이 나와요: 사막엔 미라와 거대 전갈, 설원엔 예티와 얼음 골렘, 화산엔 불꽃 임프와 용암 골렘!</li>
+      <li><b>매우 어려움(19단)</b>: 11~19단이 나오고 후반엔 19 × 19까지! 답이 세 자리면 숫자 3개를 눌러요.</li>
       <li>게임 중에도 일시정지 메뉴에서 난이도를 바꿀 수 있어요.</li>
       <li>별: 10웨이브 ★, 20웨이브 ★★, 클리어 ★★★. 쉬움은 틀리면 건너뛰며 세기 힌트가 나와요.</li></ul>
       <h3>${I('book')} 도감 &amp; 업적</h3>
