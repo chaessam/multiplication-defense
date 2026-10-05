@@ -7,7 +7,8 @@
   const I = Icons.html;
   const { TOWERS, LV_DMG, LV_RATE, LV_RANGE, ENEMIES, BOSS_ORDER, FINAL_WAVE, HERO, DIFFS, MAPS, MAP_ORDER, CARDS, RARITY, ACH, TIERS, UPGRADES } = GD;
 
-  const SAVE_KEY = 'gugudan-defense-save-v1';
+  const OLD_SAVE_KEY = 'gugudan-defense-save-v1';
+  const SAVE_KEY = 'gugudan-defense-saves'; // 맵마다 따로 저장: { last, maps: { forest: {...}, ... } }
   const SOUND_KEY = 'gugudan-defense-muted';
   const CROSS_TIME = 24;          // 첫 맵 기준, 1웨이브 병사가 길 끝까지 가는 시간(초)
   const BASE_SPEED = 59.6 / CROSS_TIME; // 월드 단위/초
@@ -727,7 +728,7 @@
     Sound.play('lose');
     updateControls();
     Profile.record(S.map, S.lowest, S.wave - 1, false);
-    const sv = loadSave();
+    const sv = loadSave(S.map);
     $('retryWave').textContent = sv ? sv.wave : S.wave;
     $('goStats').innerHTML =
       `${MAPD().name} · ${D().name} · 웨이브 <b>${S.wave}</b>에서 쓰러졌습니다.<br>정답 ${S.stats.correct}개 · 처치 ${S.stats.kills}마리 · 최고 콤보 ${S.bestCombo}`;
@@ -755,18 +756,48 @@
       cards: S.cards, pendingCards: S.pendingCards, heroGauge: S.heroGauge,
       stats: S.stats, bestCombo: S.bestCombo, savedAt: Date.now(),
     };
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (_) { /* 저장 불가 */ }
+    const all = readSaves();
+    all.maps[S.map] = data;
+    all.last = S.map;
+    writeSaves(all);
   }
-  function loadSave() {
+  function writeSaves(all) {
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(all)); } catch (_) { /* 저장 불가 */ }
+  }
+  function readSaves() {
+    let all = null;
+    try { all = JSON.parse(lsGet(SAVE_KEY)); } catch (_) { all = null; }
+    if (!all || typeof all.maps !== 'object' || !all.maps) all = { last: null, maps: {} };
+    // 예전 버전(저장 칸 1개) → 그 맵의 저장 칸으로 옮기기
+    const old = lsGet(OLD_SAVE_KEY);
+    if (old) {
+      const d = upgradeSave(old);
+      if (d && !all.maps[d.map]) { all.maps[d.map] = d; all.last = all.last || d.map; }
+      writeSaves(all);
+      try { localStorage.removeItem(OLD_SAVE_KEY); } catch (_) { /* 무시 */ }
+    }
+    return all;
+  }
+  // map을 주면 그 맵의 저장, 안 주면 가장 최근에 한 맵의 저장
+  function loadSave(map) {
+    const all = readSaves();
+    const id = map || all.last;
+    return id && all.maps[id] ? upgradeSave(all.maps[id]) : null;
+  }
+  // 저장된 맵 목록 (최근 순)
+  function allSaves() {
+    return MAP_ORDER.map(m => loadSave(m)).filter(Boolean).sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+  }
+  function upgradeSave(raw) {
     try {
-      const d = JSON.parse(lsGet(SAVE_KEY));
+      const d = typeof raw === 'string' ? JSON.parse(raw) : JSON.parse(JSON.stringify(raw));
       if (!d || !(d.wave >= 1)) return null;
       if (d.v === 1) {
         d.gold += (d.towers || []).reduce((s, t) => s + (TOWERS[t.type] ? TOWERS[t.type].cost : 0), 0);
         d.towers = []; d.v = 2;
       }
       if (d.v === 2) { d.map = 'forest'; (d.towers || []).forEach(t => { t.lvl = 1; }); d.cards = []; d.v = 3; }
-      if (d.v === 3) return d;
+      if (d.v === 3) { if (!MAPS[d.map]) d.map = 'forest'; return d; }
     } catch (_) { /* 무시 */ }
     return null;
   }
@@ -1069,12 +1100,12 @@
   });
 
   function refreshTitle() {
-    const sv = loadSave();
+    const saves = allSaves(), sv = saves[0];
     const btn = $('btnContinue');
     if (sv) {
       btn.classList.remove('hidden');
       const dd = DIFFS[sv.diff] || DIFFS.normal, mm = MAPS[sv.map] || MAPS.forest;
-      $('continueInfo').textContent = `${mm.name} · ${dd.name} · 웨이브 ${sv.wave}`;
+      $('continueInfo').textContent = saves.length > 1 ? `저장된 맵 ${saves.length}개` : `${mm.name} · ${dd.name} · 웨이브 ${sv.wave}`;
     } else btn.classList.add('hidden');
     const stars = MAP_ORDER.reduce((s, m) => s + Profile.bestStars(m), 0);
     const open = MAP_ORDER.filter(m => Profile.unlocked(m)).length;
@@ -1336,12 +1367,15 @@
     x.fillStyle = '#d9493c'; x.beginPath(); x.moveTo(cx - 3, cy); x.lineTo(cx + 8, cy - 12); x.lineTo(cx + 19, cy); x.fill();
   }
   function openMapSelect(diff) {
+    const saved = {};
+    MAP_ORDER.forEach(m => { const d = loadSave(m); if (d && DIFFS[d.diff]) saved[m] = d; });
     const html = `<div class="maps">${MAP_ORDER.map(id => {
       const m = MAPS[id], ok = Profile.unlocked(id), rec = Profile.rec(id, diff);
       return `<button class="mapc ${ok ? '' : 'locked'}" data-map="${id}" ${ok ? '' : 'disabled'}>
         <canvas width="240" height="120" data-prev="${id}"></canvas>
         <div class="info"><b>${I(m.icon)} ${m.name}</b><small>${m.desc}</small>
-          ${starsHtml(Profile.stars(id, diff))}<small>${rec.cleared ? '클리어!' : rec.best ? `최고 웨이브 ${rec.best}` : '도전 전'}</small></div>
+          ${starsHtml(Profile.stars(id, diff))}<small>${rec.cleared ? '클리어!' : rec.best ? `최고 웨이브 ${rec.best}` : '도전 전'}</small>
+          ${ok && saved[id] ? `<span class="saved-tag">${I('play')} 저장됨 · ${DIFFS[saved[id].diff].name} ${saved[id].wave}웨이브</span>` : ''}</div>
         ${ok ? '' : `<div class="lockv">${I('lock')}<b>${m.name}</b>${MAPS[m.unlock].name}에서<br>10웨이브를 넘기면 열려요</div>`}
       </button>`;
     }).join('')}</div>
@@ -1350,12 +1384,53 @@
     mball('canvas[data-prev]').forEach(cv => drawMapPreview(cv, cv.dataset.prev));
     mball('[data-map]').forEach(b => b.onclick = () => {
       if (b.disabled) return;
-      if (loadSave() && !confirm('저장된 게임이 있어요. 새 게임을 시작하면 지워집니다. 계속할까요?')) return;
-      closeModal();
-      beginPlay();
-      newGame(diff, b.dataset.map);
-      showBanner(`${I(MAPD().icon)} ${MAPD().name} · ${D().name}`, 'good', 1800);
+      const id = b.dataset.map;
+      if (saved[id]) openSlotChoice(saved[id], diff);
+      else startNew(diff, id);
     });
+  }
+  function startNew(diff, map) {
+    closeModal();
+    beginPlay();
+    newGame(diff, map);
+    showBanner(`${I(MAPD().icon)} ${MAPD().name} · ${D().name}`, 'good', 1800);
+  }
+  function continueSave(sv) {
+    if (modalOpen) closeModal();
+    beginPlay();
+    loadGame(sv, false);
+    showBanner(`${I('play')} ${MAPD().name} · 웨이브 ${S.wave}부터 이어하기`, 'good', 1800);
+  }
+  function saveLine(sv) {
+    const d = DIFFS[sv.diff] || DIFFS.normal;
+    return `${d.name} · 웨이브 ${sv.wave}${sv.cleared ? ' (무한 모드)' : ''} · 탑 ${(sv.towers || []).length}개`;
+  }
+  // 저장이 있는 맵을 고르면: 이어하기 / 처음부터
+  function openSlotChoice(sv, diff) {
+    const m = MAPS[sv.map];
+    openModal(`${I(m.icon)} ${m.name}`, `<div class="opt-list">
+      <button class="opt evolve" data-slot="cont"><span class="icon">${I('play')}</span>
+        <span class="info"><b>이어하기</b><small>${saveLine(sv)}</small></span></button>
+      <button class="opt" data-slot="new"><span class="icon">${I(DIFFS[diff].icon)}</span>
+        <span class="info"><b>처음부터 (${DIFFS[diff].name})</b><small>이 맵의 저장만 지워져요. 다른 맵 저장은 그대로예요.</small></span></button>
+    </div>`);
+    mb('[data-slot=cont]').onclick = () => continueSave(sv);
+    mb('[data-slot=new]').onclick = () => {
+      if (!confirm(`${m.name}의 저장(웨이브 ${sv.wave})이 지워져요. 처음부터 할까요?`)) return;
+      startNew(diff, sv.map);
+    };
+  }
+  // 처음 화면 '이어하기': 저장이 여러 맵이면 고르기
+  function openContinue() {
+    const saves = allSaves();
+    if (!saves.length) return;
+    if (saves.length === 1) { continueSave(saves[0]); return; }
+    hide('title');
+    openModal(`${I('play')} 이어하기`, `<div class="opt-list">${saves.map(sv => `
+      <button class="opt" data-cont="${sv.map}"><span class="icon">${I(MAPS[sv.map].icon)}</span>
+        <span class="info"><b>${MAPS[sv.map].name}</b><small>${saveLine(sv)}</small></span></button>`).join('')}</div>
+      <p class="stat-line" style="margin-top:10px;font-size:13px;color:#6b7a88">맵마다 따로 저장돼요. 새 맵을 시작해도 다른 맵 저장은 지워지지 않아요.</p>`);
+    mball('[data-cont]').forEach(b => b.onclick = () => continueSave(loadSave(b.dataset.cont)));
   }
 
   // 게임 중 난이도 바꾸기 (일시정지 메뉴)
@@ -1582,18 +1657,12 @@
     setTimeout(() => b.classList.remove('pressed'), 90);
   }
   $('btnNew').onclick = () => { Sound.init(); openDifficulty(); };
-  $('btnContinue').onclick = () => {
-    const sv = loadSave();
-    if (!sv) return;
-    beginPlay();
-    loadGame(sv, false);
-    showBanner(`${I('play')} 웨이브 ${S.wave}부터 이어하기`, 'good', 1800);
-  };
+  $('btnContinue').onclick = () => { Sound.init(); openContinue(); };
   $('btnHelp').onclick = openHelp;
   $('btnBook').onclick = () => openBook();
   $('btnAch').onclick = openAchievements;
   $('btnRetry').onclick = () => {
-    const sv = loadSave();
+    const sv = loadSave(S.map);
     beginPlay();
     if (sv) loadGame(sv, true); else newGame(S.diff, S.map);
   };

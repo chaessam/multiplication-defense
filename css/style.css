@@ -593,3 +593,5 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
 .toast.map-toast { border-color: #7dff8a; animation: toastIn .5s cubic-bezier(.2,1.5,.4,1), toastOut .4s ease-in 5s forwards; }
 .toast .sub { color: #cfe0ec !important; font-size: 11px !important; margin-top: 2px; }
 .diff-easy.evolve, .diff-normal.evolve, .diff-hard.evolve { box-shadow: 0 4px 0 #0e1f2c, 0 0 0 3px var(--gold); }
+.mapc .saved-tag { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: #2f9e4f; color: #fff !important; font-size: 11px; width: fit-content; }
+.mapc .saved-tag svg { width: 12px; height: 12px; }
