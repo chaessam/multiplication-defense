@@ -1713,11 +1713,22 @@
     Sound.init();
     markFsUsed(); fsIcon();
     if (fsEl()) { try { await (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (_) { /* 무시 */ } return; }
-    const d = document.documentElement, rq = d.requestFullscreen || d.webkitRequestFullscreen;
-    if (rq && !inApp) {
-      try { await rq.call(d, { navigationUI: 'hide' }); return; } catch (_) { /* 안내로 */ }
-    }
+    // 카카오톡(안드로이드) 안 브라우저도 전체화면이 되므로 먼저 시도하고, 안 될 때만 안내
+    if (await tryFull()) return;
     openFullGuide();
+  }
+  async function tryFull() {
+    const d = document.documentElement, rq = d.requestFullscreen || d.webkitRequestFullscreen;
+    if (!rq || fsEl()) return !!fsEl();
+    try { const r = rq.call(d, { navigationUI: 'hide' }); if (r && r.then) await r; } catch (_) { return false; }
+    return true;
+  }
+  // 휴대폰에서는 게임을 시작하는 버튼을 누를 때 저절로 전체화면 (버튼 누름이 있어야 브라우저가 허락함)
+  const isTouch = (navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window;
+  function autoFull() {
+    if (!isTouch || fsEl() || standalone()) return;
+    markFsUsed();
+    tryFull().then(fsIcon);
   }
   function openFullGuide() {
     let html = '<div class="fs-guide">';
@@ -1770,8 +1781,8 @@
     b.classList.add('pressed');
     setTimeout(() => b.classList.remove('pressed'), 90);
   }
-  $('btnNew').onclick = () => { Sound.init(); openDifficulty(); };
-  $('btnContinue').onclick = () => { Sound.init(); openContinue(); };
+  $('btnNew').onclick = () => { Sound.init(); autoFull(); openDifficulty(); };
+  $('btnContinue').onclick = () => { Sound.init(); autoFull(); openContinue(); };
   $('btnHelp').onclick = openHelp;
   $('btnBook').onclick = () => openBook();
   $('btnAch').onclick = openAchievements;
