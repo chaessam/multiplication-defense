@@ -16,15 +16,15 @@
   <div id="app">
     <header id="hud">
       <div class="pill hp" title="성 체력">
-        <span class="ico">🏰</span>
+        <span data-icon="castle"></span>
         <div class="bar"><i id="hpFill"></i><b id="hpText">100/100</b></div>
       </div>
-      <div class="pill gold-pill" title="골드"><i class="coin"></i><b id="gold">0</b></div>
-      <div class="pill gem-pill" title="보석"><span class="ico">💎</span><b id="gems">0</b></div>
-      <div class="pill wave">웨이브 <b id="waveNo">1</b></div>
+      <div class="pill gold-pill" title="골드"><span data-icon="coin"></span><b id="gold">0</b></div>
+      <div class="pill gem-pill" title="보석"><span data-icon="gem"></span><b id="gems">0</b></div>
+      <div class="pill wave"><span id="todIcon"></span><span class="wlabel">웨이브</span> <b id="waveNo">1</b><small id="waveMax">/30</small></div>
       <div class="hud-btns">
-        <button id="btnSound" class="icon-btn" aria-label="소리">🔊</button>
-        <button id="btnPause" class="icon-btn" aria-label="일시정지">⏸</button>
+        <button id="btnSound" class="icon-btn" aria-label="소리"></button>
+        <button id="btnPause" class="icon-btn" aria-label="일시정지" data-icon="pause"></button>
       </div>
     </header>
 
@@ -34,6 +34,13 @@
         <canvas id="overlay"></canvas>
         <div id="banner" class="hidden"></div>
         <div id="prepInfo" class="hidden"></div>
+        <button id="heroBtn" class="hidden" aria-label="영웅 필살기">
+          <span class="ring"></span>
+          <span class="face" data-icon="hero"></span>
+          <span class="lbl">필살기</span>
+        </button>
+        <div id="bossCut" class="hidden"><div class="slash"></div><div class="txt"><small id="bossCutSub">BOSS</small><b id="bossCutName"></b></div></div>
+        <div id="flash"></div>
       </div>
 
       <section id="controls">
@@ -46,15 +53,15 @@
             <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
             <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
             <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
-            <button data-k="del" class="k-del">⌫</button><button data-k="0">0</button><button data-k="ok" class="k-ok">✔</button>
+            <button data-k="del" class="k-del" data-icon="back"></button><button data-k="0">0</button><button data-k="ok" class="k-ok" data-icon="check"></button>
           </div>
           <div id="side">
-            <button id="btnStart" class="big-btn">⚔ 웨이브 시작</button>
-            <button id="btnUpgrade" class="big-btn alt">⚒ 강화</button>
+            <button id="btnStart" class="big-btn"></button>
+            <button id="btnUpgrade" class="big-btn alt"><span data-icon="anvil"></span> 강화</button>
             <div id="skills">
-              <button class="skill" data-skill="repair" title="성 수리"><span>🔧</span><small>8💎</small></button>
-              <button class="skill" data-skill="freeze" title="얼음 폭풍"><span>❄️</span><small>12💎</small></button>
-              <button class="skill" data-skill="meteor" title="유성 낙하"><span>☄️</span><small>20💎</small></button>
+              <button class="skill" data-skill="repair" title="성 수리"><span data-icon="wrench"></span><small>8</small></button>
+              <button class="skill" data-skill="freeze" title="얼음 폭풍"><span data-icon="snow"></span><small>12</small></button>
+              <button class="skill" data-skill="meteor" title="유성 낙하"><span data-icon="meteor"></span><small>20</small></button>
             </div>
           </div>
         </div>
@@ -62,27 +69,30 @@
     </main>
   </div>
 
-  <!-- 타이틀 화면 -->
+  <!-- 타이틀 -->
   <div id="title" class="screen">
-    <div class="parchment">
-      <div class="crest">🏰</div>
+    <div class="parchment title-card">
+      <div class="crest" data-icon="castle"></div>
       <h1>구구단 디펜스</h1>
       <p class="sub">Multiplication Defense</p>
-      <p class="lore">왕국의 성이 위험하다! 다가오는 적의 구구단 문제를 풀어 골드를 모으고,
-        궁수탑과 대포를 세워 성을 지켜라!</p>
+      <p class="lore">왕국의 성이 위험하다! 다가오는 적의 구구단 문제를 풀어 골드를 모으고, 영웅과 함께 탑을 세워 성을 지켜라!</p>
       <div class="menu">
-        <button id="btnContinue" class="big-btn hidden">▶ 이어하기 <small id="continueInfo"></small></button>
-        <button id="btnNew" class="big-btn alt">✦ 새 게임</button>
-        <button id="btnHelp" class="link-btn">📜 게임 방법</button>
+        <button id="btnContinue" class="big-btn hidden"><span data-icon="play"></span> 이어하기 <small id="continueInfo"></small></button>
+        <button id="btnNew" class="big-btn alt"><span data-icon="swords"></span> 새 게임</button>
+        <div class="menu-row">
+          <button id="btnBook" class="mini-btn"><span data-icon="book"></span>도감</button>
+          <button id="btnAch" class="mini-btn"><span data-icon="trophy"></span>업적 <small id="achCount"></small></button>
+          <button id="btnHelp" class="mini-btn"><span data-icon="scroll"></span>방법</button>
+        </div>
       </div>
       <p id="bestInfo" class="best"></p>
     </div>
   </div>
 
-  <!-- 모달 (건설 / 강화 / 도움말 / 일시정지) -->
+  <!-- 모달 -->
   <div id="modal" class="screen hidden">
     <div class="parchment sheet">
-      <button class="close" id="modalClose" aria-label="닫기">✕</button>
+      <button class="close" id="modalClose" aria-label="닫기" data-icon="close"></button>
       <h2 id="modalTitle"></h2>
       <div id="modalBody"></div>
     </div>
@@ -91,17 +101,39 @@
   <!-- 게임 오버 -->
   <div id="gameover" class="screen hidden">
     <div class="parchment">
+      <div class="crest" data-icon="skull"></div>
       <h1 class="red">성이 함락되었다!</h1>
       <p id="goStats"></p>
       <div class="menu">
-        <button id="btnRetry" class="big-btn">↻ 웨이브 <span id="retryWave"></span>부터 다시 도전</button>
-        <button id="btnGoNew" class="big-btn alt">✦ 새 게임</button>
+        <button id="btnRetry" class="big-btn"><span data-icon="play"></span> 웨이브 <span id="retryWave"></span>부터 다시 도전</button>
+        <button id="btnGoNew" class="big-btn alt"><span data-icon="home"></span> 처음 화면으로</button>
       </div>
     </div>
   </div>
 
+  <!-- 클리어 -->
+  <div id="clear" class="screen hidden">
+    <div class="parchment clear-card">
+      <div class="crest" data-icon="crown"></div>
+      <h1>왕국을 지켜냈다!</h1>
+      <p class="sub">VICTORY</p>
+      <div class="stars big" id="clearStars"></div>
+      <p id="clearStats"></p>
+      <div class="menu">
+        <button id="btnEndless" class="big-btn"><span data-icon="infinity"></span> 무한 모드로 계속하기</button>
+        <button id="btnClearTitle" class="big-btn alt"><span data-icon="home"></span> 처음 화면으로</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+
   <script src="js/vendor/three.min.js"></script>
+  <script src="js/icons.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/profile.js"></script>
   <script src="js/audio.js"></script>
+  <script src="js/models.js"></script>
   <script src="js/world.js"></script>
   <script src="js/game.js"></script>
 </body>
