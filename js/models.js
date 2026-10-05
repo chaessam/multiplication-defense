@@ -741,6 +741,22 @@ const Models = (() => {
       const bl = part(G.box, mat('#ff4a3a', { emissive: '#ff2a1a', emissiveIntensity: 0.9, roughness: 0.3 }), 0.12, 1.5, 0.05, 0.3, 0.85, 0); bl.rotation.z = -0.35; hand.add(bl);
       hand.add(part(G.box, mat('#f4c247'), 0.1, 0.08, 0.45, 0.04, 0.1, 0));
       hand.add(part(G.box, mat('#2a2030'), 0.07, 0.3, 0.07, -0.02, -0.08, 0));
+    } else if (L.weapon === 'longbow') {
+      // 장궁: 팔을 앞으로 뻗으면 활이 세로로 서고, 불화살이 시위에 걸려 있음
+      const bw = new T.Group(); bw.position.set(0.05, -0.02, 0);
+      const wood = mat('#6b3f1f'), goldM = mat('#f4c247', { metalness: 0.55, roughness: 0.3 });
+      bw.add(part(G.box, mat('#3a2414'), 0.1, 0.16, 0.1, 0, 0, 0));
+      [[1, 0.3], [-1, -0.3]].forEach(([sd]) => {
+        const lb = part(G.box, wood, 0.62, 0.07, 0.07, sd * 0.32, -0.04, 0); lb.rotation.z = sd * 0.28; bw.add(lb);
+        bw.add(part(G.oct, goldM, 0.06, 0.06, 0.06, sd * 0.62, 0.1, 0));
+      });
+      bw.add(part(G.box, mat('#f6eedb'), 1.22, 0.015, 0.015, 0, 0.12, 0));
+      const nock = new T.Group(); bw.add(nock);
+      nock.add(part(G.box, mat('#8d5b34'), 0.03, 0.85, 0.03, 0, -0.27, 0));
+      nock.add(part(G.cone4, glow('#ff7a1a', 1.4), 0.06, 0.16, 0.06, 0, -0.74, 0).rotateZ(Math.PI));
+      nock.add(part(G.box, mat('#e5483b'), 0.01, 0.14, 0.1, 0, 0.1, 0));
+      hand.add(bw);
+      g.userData.bow = bw; g.userData.nock = nock;
     } else if (L.weapon === 'crossbow') {
       // 황금 석궁 (앞으로 겨눔)
       const cb = new T.Group();
@@ -765,7 +781,14 @@ const Models = (() => {
         body.add(part(G.cyl8, gold, 0.225, 0.04, 0.225, 0, shoulderY + 0.02, sd * sz));
         body.add(part(G.cone4, gold, 0.04, 0.16, 0.04, -0.02, shoulderY + 0.22, sd * (sz + 0.02)));
       });
-      const sw = new T.Group(); sw.position.set(-0.32, 1.15, 0); sw.rotation.x = 0.6; body.add(sw);
+      if (L.weapon === 'longbow') {
+        // 화살통: 붉은 깃 화살들
+        const qv = new T.Group(); qv.position.set(-0.3, 1.0, -0.18); qv.rotation.x = -0.45; body.add(qv);
+        qv.add(part(G.cyl8, mat('#7a4a22'), 0.12, 0.7, 0.12, 0, 0, 0));
+        qv.add(part(G.cyl8, gold, 0.125, 0.05, 0.125, 0, 0.3, 0));
+        [-0.05, 0.03, 0.06].forEach((z, i) => qv.add(part(G.box, mat(i % 2 ? '#ffb030' : '#e5483b'), 0.04, 0.2, 0.08, (i - 1) * 0.05, 0.45, z)));
+      }
+      const sw = new T.Group(); sw.position.set(-0.32, 1.15, L.weapon === 'longbow' ? 0.12 : 0); sw.rotation.x = 0.6; body.add(sw);
       sw.add(part(G.box, mat('#cfe7ff', { emissive: '#5fd3ff', emissiveIntensity: 0.35, metalness: 0.5, roughness: 0.25 }), 0.05, 1.05, 0.12, 0, 0.1, 0));
       sw.add(part(G.box, gold, 0.07, 0.07, 0.36, 0, -0.45, 0));
       sw.add(part(G.box, mat('#5a3a22'), 0.06, 0.22, 0.06, 0, -0.6, 0));
