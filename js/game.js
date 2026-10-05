@@ -1703,9 +1703,15 @@
     const hide = standalone();
     $('btnFull').classList.toggle('hidden', hide);
     $('btnFullTitle').classList.toggle('hidden', hide || on);
+    // 한 번도 안 눌러 봤으면 상단 버튼도 반짝이며 알려 줌
+    let used = false; try { used = lsGet(FS_KEY) === '1'; } catch (_) { /* 무시 */ }
+    $('btnFull').classList.toggle('nudge', !used && !on && !hide);
   }
+  const FS_KEY = 'gugudan-defense-fs-used';
+  function markFsUsed() { try { localStorage.setItem(FS_KEY, '1'); } catch (_) { /* 무시 */ } }
   async function toggleFull() {
     Sound.init();
+    markFsUsed(); fsIcon();
     if (fsEl()) { try { await (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (_) { /* 무시 */ } return; }
     const d = document.documentElement, rq = d.requestFullscreen || d.webkitRequestFullscreen;
     if (rq && !inApp) {
