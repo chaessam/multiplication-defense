@@ -83,6 +83,10 @@
 | `Q` | 영웅 필살기 |
 | `Esc` | 일시정지 |
 
+## 만든 사람
+
+기획·제작 **채쌤** · [AI 수업 아카이브 · 채쌤 블로그](https://blog.naver.com/ai_classroom)
+
 ## 실행하기
 
 빌드 과정이 없는 순수 HTML/CSS/JavaScript입니다.

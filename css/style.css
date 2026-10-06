@@ -624,3 +624,11 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
 #ultDim.on { animation: ultDim 2.6s ease-out; }
 @keyframes ultDim { 0% { opacity: 0; } 12% { opacity: 1; } 70% { opacity: .85; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { #ultDim.on { animation-duration: 1.2s; } }
+
+/* 만든 사람 표시 (채쌤) */
+.maker { margin-top: 12px; padding-top: 10px; border-top: 2px dashed rgba(19,34,47,.18); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.maker-title { display: flex; align-items: baseline; justify-content: center; gap: 8px; }
+.maker-title span { font-size: 13px; color: #6b5a3e; letter-spacing: 1px; }
+.maker-title b { font-weight: 400; font-size: 22px; color: #13222f; text-shadow: 0 2px 0 #ffd23f; }
+.maker-link { font-size: 13.5px; color: #2d6fb8; text-decoration: none; border-bottom: 1.5px solid rgba(45,111,184,.35); padding-bottom: 1px; }
+.maker-link:hover, .maker-link:focus-visible { color: #13222f; border-bottom-color: #13222f; outline: none; }
