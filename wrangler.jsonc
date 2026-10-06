@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // 이 이름은 클라우드플레어 대시보드의 Worker 이름(주소 맨 앞부분)과 같아야 해요.
+  "name": "multiplication-defense",
+  "main": "worker/index.js",
+  "compatibility_date": "2025-09-01",
+  // 게임 화면 파일: 저장소 맨 위 폴더 그대로 (.assetsignore에 적힌 파일은 빼고)
+  "assets": {
+    "directory": ".",
+    "binding": "ASSETS"
+  },
+  // 참여 플레이어 수·누적 판 수를 저장하는 곳 (무료 플랜은 SQLite 방식만 가능)
+  "durable_objects": {
+    "bindings": [{ "name": "STATS", "class_name": "Stats" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Stats"] }],
+  "observability": { "enabled": true }
+}

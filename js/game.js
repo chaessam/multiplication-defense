@@ -1167,10 +1167,47 @@
     } else btn.classList.add('hidden');
     const stars = MAP_ORDER.reduce((s, m) => s + Profile.bestStars(m), 0);
     const open = MAP_ORDER.filter(m => Profile.unlocked(m)).length;
+    loadPlayerStats();
     $('bestInfo').innerHTML = `${I('map')} 열린 맵 ${open}/4 · ${I('star')} 별 ${stars}/12 · ${I('trophy')} 업적 ${Profile.achCount()}/${ACH.length}`;
     $('achCount').textContent = `${Profile.achCount()}/${ACH.length}`;
   }
+  // ================= 참여 통계 (서버) =================
+  // 이 기기를 구분하는 임의의 번호만 보내요 (이름·개인정보 없음). 서버가 없으면(파일로 열기 등) 조용히 건너뜀
+  const DEVICE_KEY = 'gugudan-defense-device';
+  function deviceId() {
+    let id = lsGet(DEVICE_KEY);
+    if (!id || !/^[a-z0-9-]{16,64}$/.test(id)) {
+      id = (crypto.randomUUID ? crypto.randomUUID() : Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('')).toLowerCase();
+      try { localStorage.setItem(DEVICE_KEY, id); } catch (_) { /* 저장 불가 */ }
+    }
+    return id;
+  }
+  const hasServer = location.protocol === 'http:' || location.protocol === 'https:';
+  let statsAt = 0;
+  function showPlayerStats(d) {
+    if (!d || !(d.players >= 0)) return;
+    const n = v => Number(v).toLocaleString('ko-KR');
+    $('playerStats').innerHTML = `${I('hero')} 참여 플레이어 <b>${n(d.players)}명</b> · 누적 <b>${n(d.games)}판</b>`;
+    $('playerStats').classList.remove('hidden');
+  }
+  async function loadPlayerStats() {
+    if (!hasServer || Date.now() - statsAt < 30000) return;
+    statsAt = Date.now();
+    try {
+      const r = await fetch('/api/stats', { cache: 'no-store' });
+      if (r.ok) showPlayerStats(await r.json());
+    } catch (_) { statsAt = 0; }
+  }
+  function reportPlayed() {
+    if (!hasServer) return;
+    try {
+      fetch('/api/played', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: deviceId() }), keepalive: true })
+        .then(r => r.ok ? r.json() : null).then(d => { if (d) { showPlayerStats(d); statsAt = Date.now(); } }).catch(() => {});
+    } catch (_) { /* 무시 */ }
+  }
+
   function beginPlay() {
+    reportPlayed();
     Sound.init();
     Sound.startMusic();
     World.setTitleCam(false);

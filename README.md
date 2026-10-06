@@ -87,6 +87,15 @@
 
 기획·제작 **채쌤** · [AI 수업 아카이브 · 채쌤 블로그](https://blog.naver.com/ai_classroom)
 
+## 참여 통계 (서버)
+
+처음 화면에 **참여 플레이어 수**(기기 수)와 **누적 판 수**가 보여요.
+- 게임을 시작할 때 이 기기를 구분하는 임의의 번호만 서버로 보내요. 이름이나 개인정보는 보내지 않아요.
+- 같은 기기가 20초 안에 다시 시작하면 판 수에 넣지 않아요.
+- 서버는 `worker/index.js`(Cloudflare Worker + Durable Object SQLite, 무료 플랜 가능)이고, 설정은 `wrangler.jsonc`예요.
+- `wrangler.jsonc`의 `name`은 클라우드플레어 대시보드의 Worker 이름(주소 맨 앞부분)과 같아야 해요.
+- 서버 없이 `index.html`을 파일로 열면 통계 줄만 숨겨지고 게임은 그대로 돼요.
+
 ## 실행하기
 
 빌드 과정이 없는 순수 HTML/CSS/JavaScript입니다.

@@ -1,0 +1,14 @@
+{
+  "name": "multiplication-defense",
+  "version": "1.0.0",
+  "private": true,
+  "description": "구구단 디펜스 - 구구단을 풀어 성을 지키는 3D 타워 디펜스 웹게임",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.147.0"
+  }
+}
