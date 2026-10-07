@@ -90,6 +90,7 @@
           <button id="btnBook" class="mini-btn"><span data-icon="book"></span>도감</button>
           <button id="btnAch" class="mini-btn"><span data-icon="trophy"></span>업적 <small id="achCount"></small></button>
           <button id="btnHelp" class="mini-btn"><span data-icon="scroll"></span>방법</button>
+          <button id="btnShare" class="mini-btn share"><span data-icon="qr"></span>공유 <small>QR코드</small></button>
         </div>
         <button id="btnFullTitle" class="full-btn"><span data-icon="expand"></span> 전체화면으로 크게 보기</button>
       </div>
@@ -144,9 +145,21 @@
     </div>
   </div>
 
+  <!-- 칠판(전자칠판·TV)에 크게 띄우는 QR -->
+  <div id="qrBig" class="hidden" role="dialog" aria-label="QR코드 크게 보기">
+    <div class="qr-big-card">
+      <h2>구구단 디펜스</h2>
+      <div class="qr-big-code" id="qrBigCode"></div>
+      <p class="qr-big-url" id="qrBigUrl"></p>
+      <p class="qr-big-tip">휴대폰·태블릿 카메라로 비추면 바로 열려요</p>
+      <button class="big-btn alt" id="qrBigClose"><span data-icon="close"></span> 닫기</button>
+    </div>
+  </div>
+
   <div id="toasts"></div>
 
   <script src="js/vendor/three.min.js"></script>
+  <script src="js/vendor/qrcode.js"></script>
   <script src="js/icons.js"></script>
   <script src="js/data.js"></script>
   <script src="js/profile.js"></script>
