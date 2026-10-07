@@ -1171,6 +1171,51 @@
     $('bestInfo').innerHTML = `${I('map')} 열린 맵 ${open}/4 · ${I('star')} 별 ${stars}/12 · ${I('trophy')} 업적 ${Profile.achCount()}/${ACH.length}`;
     $('achCount').textContent = `${Profile.achCount()}/${ACH.length}`;
   }
+  // ================= QR코드로 공유 (교실용) =================
+  // 게임 주소를 QR코드로 보여 줌. 서버에서 열었으면 그 주소, 파일로 열었으면 배포 주소
+  const HOME_URL = 'https://multiplication-defense.chaessam.workers.dev/';
+  const shareUrl = () => (/^https?:$/.test(location.protocol) ? location.origin + '/' : HOME_URL);
+  function qrSvg(text) {
+    if (typeof qrcode !== 'function') return '';
+    const q = qrcode(0, 'M');
+    q.addData(text); q.make();
+    const n = q.getModuleCount(), m = 2;
+    let d = '';
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) d += `M${c + m} ${r + m}h1v1h-1z`;
+    return `<svg viewBox="0 0 ${n + m * 2} ${n + m * 2}" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges" role="img" aria-label="게임 주소 QR코드"><rect width="100%" height="100%" fill="#fff"/><path d="${d}" fill="#13222f"/></svg>`;
+  }
+  function openShare() {
+    Sound.init();
+    const url = shareUrl();
+    hide('title');
+    openModal(`${I('qr')} QR코드로 공유`, `<div class="qr-share">
+      <div class="qr-box">${qrSvg(url)}</div>
+      <div class="qr-url" id="qrUrl">${url}</div>
+      <div class="qr-actions">
+        <button class="big-btn" id="qrBigOpen">${I('expand')} 칠판에 크게</button>
+        <button class="big-btn alt" id="qrCopy">${I('scroll')} 링크 복사</button>
+      </div>
+      <p class="qr-tip">학생들이 휴대폰·태블릿 카메라로 QR코드를 비추면 바로 게임이 열려요.<br>기록은 학생 각자의 기기에 저장돼요.</p>
+    </div>`);
+    mb('#qrBigOpen').onclick = () => {
+      $('qrBigCode').innerHTML = qrSvg(url);
+      $('qrBigUrl').textContent = url.replace(/^https:\/\//, '').replace(/\/$/, '');
+      show('qrBig');
+    };
+    mb('#qrCopy').onclick = async () => {
+      const btn = mb('#qrCopy');
+      try { await navigator.clipboard.writeText(url); btn.innerHTML = `${I('check')} 복사했어요`; }
+      catch (_) {
+        // 복사가 막힌 브라우저: 주소를 선택해 두면 길게 눌러 복사할 수 있음
+        const r = document.createRange(); r.selectNodeContents(mb('#qrUrl'));
+        const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        btn.innerHTML = `${I('check')} 주소를 길게 눌러 복사`;
+      }
+    };
+  }
+  $('qrBigClose').onclick = () => hide('qrBig');
+  $('qrBig').addEventListener('click', e => { if (e.target.id === 'qrBig') hide('qrBig'); });
+
   // ================= 참여 통계 (서버) =================
   // 이 기기를 구분하는 임의의 번호만 보내요 (이름·개인정보 없음). 서버가 없으면(파일로 열기 등) 조용히 건너뜀
   const DEVICE_KEY = 'gugudan-defense-device';
@@ -1805,6 +1850,7 @@
   window.addEventListener('keydown', ev => {
     if (!$('clear').classList.contains('hidden')) return;
     if (ev.key === 'Escape') {
+      if (!$('qrBig').classList.contains('hidden')) { hide('qrBig'); return; }
       if (modalOpen) { if (closable()) closeModal(); } else openPause();
       return;
     }
@@ -1824,6 +1870,7 @@
   $('btnNew').onclick = () => { Sound.init(); autoFull(); openDifficulty(); };
   $('btnContinue').onclick = () => { Sound.init(); autoFull(); openContinue(); };
   $('btnHelp').onclick = openHelp;
+  $('btnShare').onclick = openShare;
   $('btnBook').onclick = () => openBook();
   $('btnAch').onclick = openAchievements;
   $('btnRetry').onclick = () => {
