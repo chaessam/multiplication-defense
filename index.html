@@ -158,6 +158,49 @@
 
   <div id="toasts"></div>
 
+  <!-- 오래된 태블릿 대비: 아주 옛날 문법(ES5)으로만 쓴 안전장치.
+       부족한 기능을 채우고, 게임이 끝내 시작하지 못하면 빈 화면 대신 안내를 보여 줌 -->
+  <script>
+  (function () {
+    if (!Array.prototype.flatMap) {
+      Array.prototype.flatMap = function (fn, self) {
+        var out = [];
+        for (var i = 0; i < this.length; i++) { var v = fn.call(self, this[i], i, this); if (Array.isArray(v)) out.push.apply(out, v); else out.push(v); }
+        return out;
+      };
+    }
+    if (!Object.fromEntries) {
+      Object.fromEntries = function (list) { var o = {}; Array.prototype.forEach.call(Array.from(list), function (p) { o[p[0]] = p[1]; }); return o; };
+    }
+    var firstError = '';
+    window.addEventListener('error', function (e) { if (!firstError && !window.__gameReady) firstError = (e && e.message) || 'error'; });
+    function hasWebGL() {
+      try { var c = document.createElement('canvas'); return !!(window.WebGLRenderingContext && (c.getContext('webgl') || c.getContext('experimental-webgl'))); }
+      catch (err) { return false; }
+    }
+    function showFail(kind) {
+      if (document.getElementById('bootFail')) return;
+      var ua = navigator.userAgent || '';
+      var tips = kind === 'webgl'
+        ? '<li>이 기기는 3D 그래픽(WebGL)을 켤 수 없어요.</li><li>크롬이나 웨일 브라우저 최신 버전으로 열어 보세요.</li><li>크롬: 설정 → 시스템 → <b>하드웨어 가속 사용</b>을 켜 주세요.</li>'
+        : '<li>이 태블릿의 브라우저가 오래되어 게임을 열지 못했어요.</li><li><b>크롬·웨일·삼성 인터넷을 최신 버전으로 업데이트</b>한 뒤 다시 열어 보세요.</li><li>아이패드는 설정 → 일반 → <b>소프트웨어 업데이트</b> 후 사파리로 열어 주세요.</li>';
+      var d = document.createElement('div');
+      d.id = 'bootFail';
+      d.setAttribute('style', 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:99999;background:#1d3a4f;color:#13222f;display:flex;align-items:center;justify-content:center;padding:16px;font-family:sans-serif;overflow:auto');
+      d.innerHTML = '<div style="background:#fffaf0;border:4px solid #13222f;border-radius:18px;padding:18px 20px;max-width:520px;width:100%;line-height:1.6">' +
+        '<h2 style="margin:0 0 8px;font-size:22px">구구단 디펜스를 열 수 없어요</h2>' +
+        '<ul style="margin:0 0 10px;padding-left:20px;font-size:15px">' + tips + '</ul>' +
+        '<p style="margin:0 0 6px;font-size:13px;color:#6b5a3e">선생님께: 이 화면을 사진으로 찍어 보내 주시면 원인을 찾는 데 큰 도움이 돼요.</p>' +
+        '<p style="margin:0;font-size:11px;color:#6b5a3e;word-break:break-all;background:#f1e6cc;border-radius:8px;padding:6px 8px">' +
+        '원인: ' + kind + (firstError ? ' · ' + String(firstError).replace(/</g, '&lt;').slice(0, 160) : '') + '<br>브라우저: ' + ua.replace(/</g, '&lt;') + '</p></div>';
+      document.body.appendChild(d);
+    }
+    window.addEventListener('load', function () {
+      if (!hasWebGL()) { showFail('webgl'); return; }
+      setTimeout(function () { if (!window.__gameReady) showFail(firstError ? 'script' : 'start'); }, 2500);
+    });
+  })();
+  </script>
   <script src="js/vendor/three.min.js"></script>
   <script src="js/vendor/qrcode.js"></script>
   <script src="js/icons.js"></script>

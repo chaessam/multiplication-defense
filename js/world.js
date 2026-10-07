@@ -600,7 +600,8 @@ const World = (() => {
   function clearTowers() { [...towerObjs.keys()].forEach(removeTower); }
   function muzzle(tw) {
     const s = slots[tw.slot];
-    return { x: s.x, y: towerObjs.get(tw)?.userData.muzzleY || 2.5, z: s.z };
+    const to = towerObjs.get(tw);
+    return { x: s.x, y: (to && to.userData.muzzleY) || 2.5, z: s.z };
   }
 
   // ================= 적 =================
@@ -706,9 +707,9 @@ const World = (() => {
       const life = (opts.life || 0.5) + Math.random() * 0.5;
       P.list[slot] = {
         x: x + (opts.spread ? (Math.random() - 0.5) * opts.spread : 0), y, z: z + (opts.spread ? (Math.random() - 0.5) * opts.spread : 0),
-        vx: Math.cos(a) * Math.cos(el) * v * (opts.hv ?? 1), vy: Math.sin(el) * v * (opts.up || 1), vz: Math.sin(a) * Math.cos(el) * v * (opts.hv ?? 1),
+        vx: Math.cos(a) * Math.cos(el) * v * (opts.hv != null ? opts.hv : 1), vy: Math.sin(el) * v * (opts.up || 1), vz: Math.sin(a) * Math.cos(el) * v * (opts.hv != null ? opts.hv : 1),
         life, max: life, size: (0.08 + Math.random() * 0.12) * (opts.size || 1),
-        grav: opts.grav ?? -14, rot: Math.random() * 6, drift: opts.drift || 0,
+        grav: opts.grav != null ? opts.grav : -14, rot: Math.random() * 6, drift: opts.drift || 0,
       };
       tmpC.set(colors[i % colors.length]);
       P.im.setColorAt(slot, tmpC);
@@ -843,7 +844,7 @@ const World = (() => {
     f.s.position.set(x, y, z);
     f.vx = o.vx || 0; f.vy = o.vy || 0; f.vz = o.vz || 0;
     f.life = f.max = o.life || 0.5;
-    f.size = o.size || 0.5; f.grow = o.grow ?? 0.4; f.grav = o.grav || 0;
+    f.size = o.size || 0.5; f.grow = o.grow != null ? o.grow : 0.4; f.grav = o.grav || 0;
     f.cols = o.cols || (o.smoke ? SMOKE_COLS : FIRE_COLS); f.smoke = !!o.smoke;
     m.color.set(f.cols[0]); m.opacity = 1;
     f.s.scale.setScalar(f.size);
