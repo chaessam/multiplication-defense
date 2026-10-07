@@ -72,7 +72,7 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
   box-shadow: inset 0 2px 3px rgba(0,0,0,.6);
 }
 #hpFill {
-  position: absolute; inset: 0; width: 100%;
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0; width: 100%;
   background: linear-gradient(#8ff07a, #3fae3a);
   transition: width .25s;
   border-radius: 10px;
@@ -81,7 +81,7 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
 #hpFill.low { background: linear-gradient(#ff7a6a, #c42b1f); animation: blink .6s infinite; }
 @keyframes blink { 50% { opacity: .55; } }
 #hpText {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center;
   font-size: 13px; font-weight: 400; text-shadow: 0 1px 2px #000, 0 0 2px #000;
 }
 #hud .gold-pill b { color: var(--gold); }
@@ -244,7 +244,7 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
 
 /* ---------- 화면 / 모달 ---------- */
 .screen {
-  position: fixed; inset: 0; z-index: 10;
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 10;
   display: flex; align-items: center; justify-content: center;
   padding: 16px;
   background: rgba(8, 18, 26, .62);
@@ -404,7 +404,7 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
   --g: 0;
 }
 #heroBtn .ring {
-  position: absolute; inset: -7px; border-radius: 50%;
+  position: absolute; top: -7px; right: -7px; bottom: -7px; left: -7px; border-radius: 50%;
   background: conic-gradient(#ffd23f calc(var(--g) * 1turn), rgba(10,20,30,.55) 0);
   -webkit-mask: radial-gradient(circle, transparent 58%, #000 60%); mask: radial-gradient(circle, transparent 58%, #000 60%);
 }
@@ -421,7 +421,7 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
 
 /* 보스 컷인 */
 #bossCut {
-  position: absolute; inset: 0; z-index: 4; pointer-events: none;
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 4; pointer-events: none;
   display: flex; align-items: center; justify-content: center; overflow: hidden;
 }
 #bossCut .slash {
@@ -439,7 +439,7 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
 @keyframes cutSlash { 0% { transform: translateY(-50%) skewY(-6deg) scaleX(0); } 15% { transform: translateY(-50%) skewY(-6deg) scaleX(1); } 85% { opacity: 1; } 100% { opacity: 0; transform: translateY(-50%) skewY(-6deg) scaleX(1); } }
 @keyframes cutText { 0% { opacity: 0; transform: translateX(-60px) scale(1.3); } 18% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; transform: translateX(40px); } }
 
-#flash { position: absolute; inset: 0; pointer-events: none; background: #fff; opacity: 0; z-index: 3; }
+#flash { position: absolute; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none; background: #fff; opacity: 0; z-index: 3; }
 
 /* 토스트 (업적) */
 #toasts { position: fixed; right: 12px; top: calc(56px + env(safe-area-inset-top)); z-index: 30; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
@@ -513,7 +513,7 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
 .mapc .stars { justify-content: flex-start; margin-top: 4px; }
 .mapc .stars .ic { width: 18px; height: 18px; }
 .mapc.locked { filter: grayscale(.8); }
-.mapc .lockv { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+.mapc .lockv { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   background: rgba(14,31,44,.88); color: #fff; font-size: 13px; text-align: center; padding: 10px; }
 .mapc .lockv b { font-weight: 400; font-size: 16px; color: var(--gold); }
 .mapc .lockv .ic { width: 36px; height: 36px; }
@@ -619,7 +619,7 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
 .diff-expert.evolve { box-shadow: 0 4px 0 #0e1f2c, 0 0 0 3px var(--gold); }
 
 /* 필살기: 하늘이 붉게 어두워짐 */
-#ultDim { position: absolute; inset: 0; pointer-events: none; z-index: 1; opacity: 0;
+#ultDim { position: absolute; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none; z-index: 1; opacity: 0;
   background: radial-gradient(ellipse at 50% 40%, rgba(255,110,30,.10), rgba(120,20,10,.55) 60%, rgba(20,5,5,.85)); }
 #ultDim.on { animation: ultDim 2.6s ease-out; }
 @keyframes ultDim { 0% { opacity: 0; } 12% { opacity: 1; } 70% { opacity: .85; } 100% { opacity: 0; } }
@@ -647,7 +647,7 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
 .qr-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
 .qr-actions .big-btn { font-size: 16px; padding: 9px 6px; }
 .qr-tip { font-size: 13px; color: #6b5a3e; line-height: 1.5; margin: 0; }
-#qrBig { position: fixed; inset: 0; z-index: 60; background: rgba(10,20,30,.92); display: flex; align-items: center; justify-content: center; padding: 16px; }
+#qrBig { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 60; background: rgba(10,20,30,.92); display: flex; align-items: center; justify-content: center; padding: 16px; }
 #qrBig.hidden { display: none; }
 .qr-big-card { background: #fffaf0; border: 4px solid #13222f; border-radius: 22px; padding: 18px 22px 20px; display: flex; flex-direction: column; align-items: center; gap: 8px; max-height: 100%; }
 .qr-big-card h2 { margin: 0; font-size: clamp(24px, 4.5vh, 44px); color: #13222f; }

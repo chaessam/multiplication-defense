@@ -1929,4 +1929,5 @@
 
   // 디버그/테스트용
   window.__game = { S, World, Profile, openDiffChange, startWave, newGame, submit, pressDigit, useSkill, useUlt, buildWave, openBuild, openTower, openCards, openBook, openAchievements, openMapSelect, waveClear, spawnEnemy, computeMods };
+  window.__gameReady = true; // index.html의 안전장치가 '게임이 잘 시작됨'을 알 수 있게
 })();
