@@ -104,20 +104,20 @@ const GD = (() => {
     normal: {
       name: '보통', icon: 'swords', desc: '기본 난이도. 2단부터 시작해서 점점 어려운 단이 나와요.',
       // 한 문제 3초 안팎이면 끝까지, 느리면 중간에 막힘
-      spd: 1, spdCap: 1.9, minSpd: 0.4, hp: 1, iStart: 4.0, iMin: 2.0, iDec: 0.09, cBase: 6, cPer: 1.1, cMax: 30,
-      gold: 1, castle: 100, startGold: 80,
+      spd: 1, spdCap: 1.9, minSpd: 0.4, hp: 1.25, iStart: 4.0, iMin: 2.0, iDec: 0.09, cBase: 6, cPer: 1.1, cMax: 30,
+      gold: 1, castle: 100, startGold: 80, shield2: true,
     },
     hard: {
       name: '어려움', icon: 'fire', desc: '구구단 고수 도전! 처음부터 2~9단이 모두 나오고, 적이 빠르고 튼튼해요.',
       // 한 문제 2초 안쪽의 구구단 고수용
-      spd: 1.15, spdCap: 2.2, minSpd: 0.5, hp: 1.35, iStart: 2.8, iMin: 1.35, iDec: 0.07, cBase: 8, cPer: 1.3, cMax: 36,
-      gold: 0.9, castle: 100, startGold: 80, allDan: true,
+      spd: 1.15, spdCap: 2.2, minSpd: 0.5, hp: 1.7, iStart: 2.8, iMin: 1.35, iDec: 0.07, cBase: 8, cPer: 1.3, cMax: 36,
+      gold: 0.9, castle: 100, startGold: 80, allDan: true, shield2: true,
     },
     expert: {
       name: '매우 어려움', icon: 'skull', desc: '19단 모드! 11~19단이 나오고, 후반에는 19 × 19까지 나와요. 진짜 고수만 도전!',
       // 두 자리 곱셈은 암산이 오래 걸리므로 한 문제 시간은 길게(6.5초 → 4.2초), 대신 적이 튼튼하고 많음
-      spd: 1.05, spdCap: 2.0, minSpd: 0.5, hp: 1.45, iStart: 6.5, iMin: 4.2, iDec: 0.08, cBase: 7, cPer: 1.1, cMax: 30,
-      gold: 0.75, castle: 100, startGold: 90, big: true,
+      spd: 1.05, spdCap: 2.0, minSpd: 0.5, hp: 1.75, iStart: 6.5, iMin: 4.2, iDec: 0.08, cBase: 7, cPer: 1.1, cMax: 30,
+      gold: 0.75, castle: 100, startGold: 90, big: true, shield2: true,
     },
   };
 
