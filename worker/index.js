@@ -288,6 +288,8 @@ export class Stats extends DurableObject {
 
   // ---------- 점수·랭킹 ----------
   // 웨이브를 넘길 때마다 들어오는 이번 판 점수. 말이 안 되는 점수·속도는 받지 않음
+  // 판마다 '지금 점수'(웨이브를 다시 도전하면 마지막으로 깬 점수가 들어간 총점)를 두고,
+  // 난이도별 최고 기록은 그 계정의 판들 가운데 가장 높은 점수로 다시 계산
   submitScore(a, { runId, diff, map, wave, score }) {
     const now = Date.now();
     const run = this.sql.exec('SELECT * FROM runs WHERE account_id = ? AND run_id = ?', a.id, runId).toArray()[0];
@@ -295,25 +297,25 @@ export class Stats extends DurableObject {
       if (run.diff !== diff) return { status: 400, error: '점수 정보가 올바르지 않아요.' };
       if (now - run.last_submit < SCORE_GAP_MS) return { status: 429, error: '잠시 후 다시 보낼게요.' };
       if (wave > run.first_wave && now - run.started < (wave - run.first_wave) * MIN_WAVE_MS) return { status: 400, error: '점수를 확인할 수 없어 기록하지 않았어요.' };
-      this.sql.exec('UPDATE runs SET score = MAX(score, ?), wave = MAX(wave, ?), map = ?, last_submit = ? WHERE account_id = ? AND run_id = ?', score, wave, map, now, a.id, runId);
+      this.sql.exec('UPDATE runs SET score = ?, wave = ?, map = ?, last_submit = ? WHERE account_id = ? AND run_id = ?', score, wave, map, now, a.id, runId);
     } else {
       this.sql.exec('INSERT INTO runs (account_id, run_id, diff, map, score, wave, first_wave, started, last_submit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         a.id, runId, diff, map, score, wave, wave, now, now);
-      // 계정마다 판 기록은 최근 200개만
-      if (Math.random() < 0.05) this.sql.exec(`DELETE FROM runs WHERE account_id = ? AND run_id NOT IN
-        (SELECT run_id FROM runs WHERE account_id = ? ORDER BY last_submit DESC LIMIT 200)`, a.id, a.id);
     }
-    const best = this.sql.exec('SELECT score FROM best WHERE account_id = ? AND diff = ?', a.id, diff).toArray()[0];
-    let newBest = false;
-    if (!best || score > best.score) {
-      newBest = true;
+    const before = this.sql.exec('SELECT score FROM best WHERE account_id = ? AND diff = ?', a.id, diff).toArray()[0];
+    const top = this.sql.exec('SELECT run_id, score, wave, map FROM runs WHERE account_id = ? AND diff = ? ORDER BY score DESC, last_submit ASC LIMIT 1', a.id, diff).one();
+    if (!before || before.score !== top.score) {
       this.sql.exec(`INSERT INTO best (account_id, diff, school, score, wave, map, run_id, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (account_id, diff) DO UPDATE SET school = excluded.school, score = excluded.score, wave = excluded.wave, map = excluded.map, run_id = excluded.run_id, updated = excluded.updated`,
-        a.id, diff, a.school, score, wave, map, runId, now);
+        a.id, diff, a.school, top.score, top.wave, top.map, top.run_id, now);
       this.rankCache.clear();
     }
-    const bestScore = newBest ? score : best.score;
-    return { status: 200, ok: true, newBest, best: bestScore, rank: this.rankOf(diff, bestScore, '') };
+    // 오래된 판 기록 정리 (최근 200판 + 난이도별 최고 기록 판은 남김)
+    if (Math.random() < 0.05) this.sql.exec(`DELETE FROM runs WHERE account_id = ? AND run_id NOT IN
+      (SELECT run_id FROM runs WHERE account_id = ? ORDER BY last_submit DESC LIMIT 200)
+      AND run_id NOT IN (SELECT run_id FROM best WHERE account_id = ?)`, a.id, a.id, a.id);
+    const newBest = top.run_id === runId && (!before || top.score > before.score);
+    return { status: 200, ok: true, newBest, best: top.score, rank: this.rankOf(diff, top.score, '') };
   }
   rankOf(diff, score, school) {
     const row = school
