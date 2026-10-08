@@ -473,10 +473,33 @@ const World = (() => {
 
   // ================= 영웅 =================
   let heroObj = null;
-  const hero = { aim: Math.PI, aimGoal: Math.PI, shootT: 0, castT: 0, ultT: 0, ultDur: 1.3 };
+  const hero = { aim: Math.PI, aimGoal: Math.PI, shootT: 0, castT: 0, ultT: 0, ultDur: 1.3, id: 'arin' };
+  // 영웅마다 다른 공격 색 (불꽃 꼬리·폭발·빛·받침의 색)
+  const HERO_FX = {
+    arin:  { fire: ['#ffe27a', '#ffa21f', '#ff5512', '#b8200c', '#4a1408'], smoke: ['#6a5a52', '#3a3230'], flash: ['#ffffff', '#ffd27a'], hit: ['#ffe9a0', '#ff9a2a', '#ff4a12'],
+             ring: '#ff8a1a', ring2: '#ff6a12', bits: ['#ffd23f', '#ff7a1a', '#3a2a22'], light: '#ff8a2a', wingA: '#ff7a1a', wingB: '#ffd23f', tail: '#ff5512',
+             base: '#ffd23f', rune: '#7fe3ff', beam: '#ffe680', dim: 'rgba(255,110,30,.10), rgba(120,20,10,.55) 60%, rgba(20,5,5,.85)' },
+    sol:   { fire: ['#ffffff', '#fff3a0', '#ffd23f', '#f0a020', '#8a5a10'], smoke: ['#fff6d8', '#e8d8a0'], flash: ['#ffffff', '#fff3a0'], hit: ['#ffffff', '#fff3a0', '#ffc21f'],
+             ring: '#ffd23f', ring2: '#ffe680', bits: ['#ffffff', '#ffd23f', '#f0a020'], light: '#ffe680', wingA: '#ffd23f', wingB: '#ffffff', tail: '#ffb030',
+             base: '#ffd23f', rune: '#ffe680', beam: '#fff3b0', dim: 'rgba(255,240,170,.18), rgba(200,140,20,.45) 60%, rgba(60,30,0,.75)' },
+    seori: { fire: ['#ffffff', '#d8f8ff', '#8fe0ff', '#3a8fd8', '#1a3a6a'], smoke: ['#eef8ff', '#b8d4ea'], flash: ['#ffffff', '#c8f4ff'], hit: ['#ffffff', '#bff3ff', '#5fc8ff'],
+             ring: '#9fe6ff', ring2: '#bff3ff', bits: ['#ffffff', '#9fe6ff', '#3f86c6'], light: '#8fd8ff', wingA: '#7fd8ff', wingB: '#e6fbff', tail: '#5fc8ff',
+             base: '#9fe6ff', rune: '#bff3ff', beam: '#d8f6ff', dim: 'rgba(200,240,255,.15), rgba(30,90,160,.5) 60%, rgba(5,15,40,.85)' },
+    rai:   { fire: ['#ffffff', '#fff59a', '#c27bff', '#7a3aff', '#2a1060'], smoke: ['#8a7aa8', '#3a3050'], flash: ['#ffffff', '#fff59a'], hit: ['#ffffff', '#fff59a', '#a85aff'],
+             ring: '#c27bff', ring2: '#fff59a', bits: ['#fff59a', '#c27bff', '#ffffff'], light: '#b08aff', wingA: '#9a5aff', wingB: '#fff59a', tail: '#c27bff',
+             base: '#c27bff', rune: '#fff59a', beam: '#d8b8ff', dim: 'rgba(200,160,255,.12), rgba(60,20,120,.55) 60%, rgba(10,5,25,.88)' },
+  };
+  let HT = HERO_FX.arin;
+  function setHero(id) {
+    if (!HERO_FX[id]) id = 'arin';
+    if (hero.id === id && heroObj) return;
+    hero.id = id; HT = HERO_FX[id];
+    fireLight.color.set(HT.light);
+    if (heroObj) { mapGroup.remove(heroObj); buildHeroObj(); }
+  }
   function buildHeroObj() {
     heroObj = new T.Group();
-    const m = Models.buildHero();
+    const m = Models.buildHero(hero.id);
     m.scale.setScalar(2.6);
     heroObj.add(m);
     // 발밑 2단 석재 받침 + 금테
@@ -486,21 +509,21 @@ const World = (() => {
     base2.position.y = 0.3; base2.receiveShadow = true; heroObj.add(base2);
     const trim = new T.Mesh(new T.CylinderGeometry(1.36, 1.36, 0.06, 24), mat('#f4c247', { metalness: 0.5, roughness: 0.35 }));
     trim.position.y = 0.2; heroObj.add(trim);
-    const ring = new T.Mesh(new T.RingGeometry(1.45, 1.7, 32).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: '#ffd23f', transparent: true, opacity: 0.7, depthWrite: false }));
+    const ring = new T.Mesh(new T.RingGeometry(1.45, 1.7, 32).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: HT.base, transparent: true, opacity: 0.7, depthWrite: false }));
     ring.position.y = 0.25; heroObj.add(ring);
     // 회전하는 마법진 + 빛기둥 (멀리서도 영웅이 보이게)
     const rune = new T.Group(); rune.position.y = 0.4; heroObj.add(rune);
-    const runeMat = new T.MeshBasicMaterial({ color: '#7fe3ff', transparent: true, opacity: 0.55, depthWrite: false, side: T.DoubleSide });
+    const runeMat = new T.MeshBasicMaterial({ color: HT.rune, transparent: true, opacity: 0.55, depthWrite: false, side: T.DoubleSide });
     rune.add(new T.Mesh(new T.RingGeometry(0.8, 0.88, 32).rotateX(-Math.PI / 2), runeMat));
     for (let i = 0; i < 6; i++) {
       const a = i / 6 * Math.PI * 2;
       const d = new T.Mesh(new T.PlaneGeometry(0.16, 0.16).rotateX(-Math.PI / 2), runeMat);
       d.position.set(Math.cos(a) * 1.08, 0, Math.sin(a) * 1.08); d.rotation.y = a + Math.PI / 4; rune.add(d);
     }
-    const beam = new T.Mesh(new T.CylinderGeometry(0.75, 1.0, 5.5, 16, 1, true), new T.MeshBasicMaterial({ color: '#ffe680', transparent: true, opacity: 0.12, depthWrite: false, side: T.DoubleSide }));
+    const beam = new T.Mesh(new T.CylinderGeometry(0.75, 1.0, 5.5, 16, 1, true), new T.MeshBasicMaterial({ color: HT.beam, transparent: true, opacity: 0.12, depthWrite: false, side: T.DoubleSide }));
     beam.position.y = 2.95; heroObj.add(beam);
     // 머리 위 금빛 별 표식
-    const mark = new T.Mesh(new T.OctahedronGeometry(0.28, 0), new T.MeshBasicMaterial({ color: '#ffd23f' }));
+    const mark = new T.Mesh(new T.OctahedronGeometry(0.28, 0), new T.MeshBasicMaterial({ color: HT.base }));
     mark.position.y = 5.3; heroObj.add(mark);
     heroObj.userData = { model: m, ring, rune, beam, mark };
     m.position.y = 0.38;
@@ -518,6 +541,7 @@ const World = (() => {
   function heroMuzzle() {
     const u = heroObj && heroObj.userData.model.userData;
     if (u && u.nock) { u.nock.children[1].getWorldPosition(mv); return { x: mv.x, y: mv.y, z: mv.z }; }
+    if (u && u.muzzle) { u.muzzle.getWorldPosition(mv); return { x: mv.x, y: mv.y, z: mv.z }; }
     return { x: heroSpot.x + Math.cos(hero.aim) * 1.1, y: 3.2, z: heroSpot.z - Math.sin(hero.aim) * 1.1 };
   }
   function syncHero(dt, time, gauge) {
@@ -552,7 +576,16 @@ const World = (() => {
       // 시위에 건 불화살: 쏜 직후 잠깐 비었다가 다시 걸림, 촉에서 불꽃이 피어오름
       u.nock.visible = hero.shootT <= 0.05;
       if (u.nock.visible && Math.random() < dt * 14) { const m = heroMuzzle(); flame(m.x, m.y, m.z, { vx: rs(0.2), vy: 0.8, vz: rs(0.2), life: 0.35, size: 0.32, grow: -0.2 }); }
+    } else if (u.muzzle && Math.random() < dt * (hero.id === 'rai' ? 20 : 12)) {
+      // 무기 끝에서 빛·냉기·번개가 피어오름
+      const mz = heroMuzzle();
+      if (hero.id === 'rai') flame(mz.x + rs(0.35), mz.y + rs(0.35), mz.z + rs(0.35), { life: 0.08, size: 0.3 + Math.random() * 0.25, grow: -0.4, add: true });
+      else flame(mz.x, mz.y, mz.z, { vx: rs(0.25), vy: hero.id === 'seori' ? -0.2 : 0.7, vz: rs(0.25), life: 0.4, size: 0.34, grow: -0.2, add: hero.id === 'sol' });
     }
+    if (u.spinner) u.spinner.rotation.z = time * (hero.shootT > 0 ? 30 : 14);
+    if (u.orbit) { u.orbit.rotation.y = time * 1.6; u.orbit.position.y = 1.0 + Math.sin(time * 2) * 0.08; }
+    if (u.crystal) u.crystal.rotation.x = time * 2;
+    if (u.tails) u.tails.rotation.y = Math.sin(time * 5) * 0.25;
     const hu = heroObj.userData;
     hu.rune.rotation.y = time * 0.8;
     hu.rune.children[0].material.opacity = 0.35 + gauge * 0.35;
@@ -562,8 +595,8 @@ const World = (() => {
     const ring = heroObj.userData.ring;
     ring.material.opacity = 0.35 + gauge * 0.5 + (gauge >= 1 ? Math.sin(time * 8) * 0.2 : 0);
     ring.scale.setScalar(1 + (gauge >= 1 ? Math.sin(time * 6) * 0.06 : 0));
-    ring.material.color.set(gauge >= 1 ? '#fff07a' : '#ffd23f');
-    if (gauge >= 1 && Math.random() < 0.3) burst(heroSpot.x + (Math.random() - 0.5) * 1.6, 0.4, heroSpot.z + (Math.random() - 0.5) * 1.6, 1, ['#ffe14a', '#ffffff'], 0.3, { grav: 5 });
+    ring.material.color.set(gauge >= 1 ? '#ffffff' : HT.base);
+    if (gauge >= 1 && Math.random() < 0.3) burst(heroSpot.x + (Math.random() - 0.5) * 1.6, 0.4, heroSpot.z + (Math.random() - 0.5) * 1.6, 1, [HT.base, '#ffffff'], 0.3, { grav: 5 });
   }
 
   // ================= 탑 =================
@@ -759,6 +792,13 @@ const World = (() => {
     scene.add(o);
     fx.push({ o, life: 0.9, max: 0.9, kind: 'pillar', h });
   }
+  // 땅에서 솟는 얼음 가시 (서리의 공격이 꽂힌 자리)
+  function iceSpike(x, z, h) {
+    const o = new T.Mesh(G.cone6, new T.MeshStandardMaterial({ color: '#e6fbff', emissive: '#5fc8ff', emissiveIntensity: 0.6, roughness: 0.1, transparent: true, opacity: 0.95 }));
+    o.position.set(x, 0, z); o.rotation.set(rs(0.35), 0, rs(0.35));
+    scene.add(o);
+    fx.push({ o, life: 0.9, max: 0.9, kind: 'spike', h });
+  }
   function meteor(x, z, delay, onHit, kind = 'meteor') {
     let o;
     if (kind === 'blade') {
@@ -786,6 +826,13 @@ const World = (() => {
       } else if (f.kind === 'ring') {
         f.o.scale.setScalar(f.r * (1.05 - a * 0.6));
         f.o.material.opacity = a;
+      } else if (f.kind === 'zap') {
+        f.o.children.forEach(m => { m.material.opacity = a; });
+      } else if (f.kind === 'spike') {
+        const k = 1 - a, up = Math.min(1, k * 6);
+        f.o.scale.set(0.35 * f.h, f.h * up, 0.35 * f.h);
+        f.o.position.y = f.h * up * 0.5;
+        f.o.material.opacity = Math.min(1, a * 2.5) * 0.95;
       } else if (f.kind === 'pillar') {
         f.o.material.opacity = a * 0.6;
         f.o.scale.x = f.o.scale.z = 1.2 + (1 - a) * 0.8;
@@ -827,8 +874,6 @@ const World = (() => {
   }
   const FIRE_TEX = softTex([[0, 'rgba(255,255,255,1)'], [0.45, 'rgba(255,255,255,0.85)'], [0.75, 'rgba(255,255,255,0.3)'], [1, 'rgba(255,255,255,0)']]);
   const SMOKE_TEX = softTex([[0, 'rgba(255,255,255,0.7)'], [0.6, 'rgba(255,255,255,0.25)'], [1, 'rgba(255,255,255,0)']]);
-  const FIRE_COLS = ['#ffe27a', '#ffa21f', '#ff5512', '#b8200c', '#4a1408'];
-  const SMOKE_COLS = ['#6a5a52', '#3a3230'];
   const flames = [], flamePool = [];
   const MAX_FLAMES = 520;
   function flame(x, y, z, o = {}) {
@@ -845,7 +890,7 @@ const World = (() => {
     f.vx = o.vx || 0; f.vy = o.vy || 0; f.vz = o.vz || 0;
     f.life = f.max = o.life || 0.5;
     f.size = o.size || 0.5; f.grow = o.grow != null ? o.grow : 0.4; f.grav = o.grav || 0;
-    f.cols = o.cols || (o.smoke ? SMOKE_COLS : FIRE_COLS); f.smoke = !!o.smoke;
+    f.cols = o.cols || (o.smoke ? HT.smoke : HT.fire); f.smoke = !!o.smoke;
     m.color.set(f.cols[0]); m.opacity = 1;
     f.s.scale.setScalar(f.size);
     scene.add(f.s); flames.push(f);
@@ -877,6 +922,7 @@ const World = (() => {
 
   // 불화살 모델: 나무 화살대, 쇠 화살촉, 불붙은 천 뭉치, 깃 3장, 불꽃 두 겹
   function fireArrowMesh(big) {
+    if (hero.id !== 'arin') return heroShotMesh(big);
     const g = new T.Group();
     const s = big ? 2.0 : 1.4;
     g.add(part(G.box, mat('#8d5b34'), 1.1 * s, 0.055 * s, 0.055 * s, -0.45 * s, 0, 0));
@@ -908,6 +954,82 @@ const World = (() => {
     }
     return g;
   }
+  // 큰 공격의 날개 달린 짐승 (불사조 / 황금 독수리 / 서리 용 / 천둥 용)
+  const wingGeo2 = new T.BufferGeometry();
+  wingGeo2.setAttribute('position', new T.Float32BufferAttribute([0, 0, 0, -1.6, 0, 0, -0.6, 0, 1.9, 0, 0, 0, -0.6, 0, 1.9, 0.4, 0, 1.2], 3));
+  function addWings(g, k) {
+    const wm = new T.MeshBasicMaterial({ color: HT.wingA, transparent: true, opacity: 0.9, side: T.DoubleSide, depthWrite: false });
+    const wm2 = new T.MeshBasicMaterial({ color: HT.wingB, transparent: true, opacity: 0.9, side: T.DoubleSide, depthWrite: false });
+    g.userData.wings = [-1, 1].map(sd => {
+      const w = new T.Group(); w.scale.set(k, 1, sd * k); w.position.x = -0.3; g.add(w);
+      w.add(new T.Mesh(wingGeo2, wm));
+      const w2 = new T.Mesh(wingGeo2, wm2); w2.scale.set(0.6, 1, 0.6); w2.position.y = 0.02; w.add(w2);
+      return w;
+    });
+  }
+  // 솔·서리·라이의 공격 모양
+  function heroShotMesh(big) {
+    const g = new T.Group();
+    const s = big ? 2.0 : 1.4, id = hero.id;
+    if (id === 'sol') {
+      // 빛의 창: 금빛 자루 + 하얗게 빛나는 창날 + 햇빛 원반
+      g.add(part(G.box, glow('#ffd23f', 1.1), 1.3 * s, 0.05 * s, 0.05 * s, -0.5 * s, 0, 0));
+      g.add(part(G.oct, glow('#ffffff', 1.6), 0.42 * s, 0.1 * s, 0.1 * s, 0.25 * s, 0, 0));
+      g.add(part(G.box, glow('#ffb030', 1.2), 0.05 * s, 0.05 * s, 0.34 * s, 0.0, 0, 0));
+    } else if (id === 'seori') {
+      // 얼음 수정: 길쭉한 수정 + 작은 조각 둘
+      g.add(part(G.oct, mat('#f2fdff', { emissive: '#7fd8ff', emissiveIntensity: 1.1, roughness: 0.05 }), 0.6 * s, 0.13 * s, 0.13 * s, 0, 0, 0));
+      g.add(part(G.oct, glow('#bff3ff', 1.3), 0.26 * s, 0.07 * s, 0.07 * s, -0.25 * s, 0.1 * s, 0.08 * s));
+      g.add(part(G.oct, glow('#bff3ff', 1.3), 0.22 * s, 0.06 * s, 0.06 * s, -0.3 * s, -0.08 * s, -0.08 * s));
+    } else {
+      // 번개 표창: 네 날 표창 (날아가며 빙글빙글)
+      const sp = new T.Group(); g.add(sp);
+      const blade = mat('#e8ecf2', { metalness: 0.7, roughness: 0.2, emissive: '#8a4ae0', emissiveIntensity: 0.4 });
+      for (let i = 0; i < 4; i++) { const b = part(G.cone4, blade, 0.11 * s, 0.34 * s, 0.03 * s, 0, 0, 0); b.position.set(0, Math.cos(i * Math.PI / 2) * 0.17 * s, Math.sin(i * Math.PI / 2) * 0.17 * s); b.rotation.x = -i * Math.PI / 2; sp.add(b); }
+      sp.add(part(G.ico, glow('#fff59a', 1.6), 0.1 * s, 0.1 * s, 0.1 * s, 0, 0, 0));
+      g.userData.spin = sp;
+    }
+    const outer = new T.Sprite(new T.SpriteMaterial({ map: FIRE_TEX, color: HT.fire[2], transparent: true, depthWrite: false }));
+    outer.scale.setScalar(big ? 2.4 : 1.25); outer.position.x = 0.05 * s; g.add(outer);
+    const inner = new T.Sprite(new T.SpriteMaterial({ map: FIRE_TEX, color: HT.fire[1], transparent: true, depthWrite: false, blending: T.AdditiveBlending }));
+    inner.scale.setScalar(big ? 1.1 : 0.55); inner.position.x = 0.1 * s; g.add(inner);
+    g.userData.outer = outer; g.userData.inner = inner; g.userData.base = big ? 2.4 : 1.25;
+    if (big) {
+      addWings(g, id === 'sol' ? 1.15 : 1);
+      if (id === 'seori' || id === 'rai') {
+        // 용: 뿔 달린 머리 + 긴 꼬리
+        g.add(part(G.box, glow(HT.wingB, 1.2), 0.5, 0.26, 0.3, 0.55, 0.05, 0));
+        [-1, 1].forEach(sd => { const h = part(G.cone4, glow('#ffffff', 1.2), 0.06, 0.4, 0.06, 0.4, 0.28, sd * 0.12); h.rotation.z = 0.9; g.add(h); });
+        for (let i = 0; i < 5; i++) g.add(part(G.oct, glow(i % 2 ? HT.wingA : HT.tail, 1.2), 0.32 - i * 0.04, 0.2 - i * 0.025, 0.2 - i * 0.025, -0.9 - i * 0.38, Math.sin(i) * 0.08, 0));
+      } else {
+        // 독수리: 하얀 머리와 부채꼴 꼬리깃
+        g.add(part(G.ico, glow('#ffffff', 1.3), 0.26, 0.24, 0.24, 0.5, 0.06, 0));
+        g.add(part(G.cone4, glow('#ffb030', 1.2), 0.08, 0.22, 0.08, 0.72, 0.02, 0).rotateZ(-Math.PI / 2));
+        [-0.35, -0.12, 0.12, 0.35].forEach(z => g.add(part(G.box, glow(HT.tail, 1.1), 0.9, 0.04, 0.16, -1.9, 0, z).rotateY(z * 0.8)));
+      }
+    }
+    return g;
+  }
+  // 번개 줄기 (라이의 공격과 필살기)
+  function zap(x0, y0, z0, x1, y1, z1, w) {
+    const pts = [], n = 7;
+    for (let i = 0; i <= n; i++) {
+      const k = i / n, j = i === 0 || i === n ? 0 : 0.5;
+      pts.push(new T.Vector3(x0 + (x1 - x0) * k + rs(j), y0 + (y1 - y0) * k + rs(j * 0.6), z0 + (z1 - z0) * k + rs(j)));
+    }
+    const grp = new T.Group();
+    for (let i = 0; i < n; i++) {
+      const a = pts[i], b = pts[i + 1], len = a.distanceTo(b);
+      const m = new T.Mesh(G.box, new T.MeshBasicMaterial({ color: i % 2 ? '#fff59a' : '#ffffff', transparent: true, opacity: 1, depthWrite: false }));
+      m.scale.set(w || 0.12, len, w || 0.12);
+      m.position.copy(a).add(b).multiplyScalar(0.5);
+      m.quaternion.setFromUnitVectors(UPV, adir.copy(b).sub(a).normalize());
+      grp.add(m);
+    }
+    scene.add(grp);
+    fx.push({ o: grp, life: 0.18, max: 0.18, kind: 'zap' });
+  }
+  const UPV = new T.Vector3(0, 1, 0);
   const fireArrows = [];
   const AX = new T.Vector3(1, 0, 0);
   function arrowTarget(a) {
@@ -950,7 +1072,8 @@ const World = (() => {
       }
       w.g.position.copy(pos);
       const u = w.g.userData;
-      if (u.wings) u.wings.forEach(x => { x.rotation.x = Math.sin(time * 14) * 0.6 * x.scale.z; });
+      if (u.wings) u.wings.forEach(x => { x.rotation.x = Math.sin(time * 14) * 0.6 * Math.sign(x.scale.z); });
+      if (hero.id === 'rai' && Math.random() < 0.5) { const q = pathAt(Math.max(0, 1 - k - 0.05)); zap(pos.x, pos.y, pos.z, q.x + rs(1.5), 0.2, q.z + rs(1.5), 0.14); }
       u.outer.scale.setScalar(u.base * (0.9 + Math.sin(time * 40) * 0.12));
       // 거대한 불꽃 꼬리 + 길 위에 남는 불바다
       for (let j = 0; j < 5; j++) flame(pos.x + rs(1.2), pos.y + rs(0.8), pos.z + rs(1.2), { vx: rs(1), vy: 1 + Math.random(), vz: rs(1), life: 0.35 + Math.random() * 0.3, size: 1.4 + Math.random(), grow: -0.1 });
@@ -1004,7 +1127,9 @@ const World = (() => {
       a.g.position.copy(ap);
       const u = a.g.userData;
       u.outer.scale.setScalar(u.base * (0.9 + Math.sin(time * 40 + i) * 0.12));
-      if (u.wings) u.wings.forEach(w => { w.rotation.x = Math.sin(time * 18) * 0.5 * w.scale.z; });
+      if (u.wings) u.wings.forEach(w => { w.rotation.x = Math.sin(time * 18) * 0.5 * Math.sign(w.scale.z); });
+      if (u.spin) u.spin.rotation.x = time * 40;
+      if (hero.id === 'rai' && Math.random() < (a.big ? 0.7 : 0.35)) zap(a.prev.x, a.prev.y, a.prev.z, ap.x + rs(0.6), ap.y + rs(0.6), ap.z + rs(0.6), a.big ? 0.1 : 0.06);
       // 불꽃 꼬리 + 연기
       const n = a.big ? 6 : 3;
       for (let j = 0; j < n; j++) {
@@ -1026,11 +1151,14 @@ const World = (() => {
   }
   function fireImpact(x, y, z, big, small) {
     fireBurst(x, y, z, big ? 60 : small ? 12 : 28, big ? 9 : 6.5, big ? 0.55 : 0.4);
-    flame(x, y, z, { life: 0.3, size: big ? 3.4 : small ? 1.0 : 1.7, grow: 0.5, cols: ['#ffe9a0', '#ff9a2a', '#ff4a12'] });
-    flame(x, y, z, { life: 0.14, size: big ? 2.2 : 1.1, grow: 0.8, add: true, cols: ['#ffffff', '#ffd27a'] });
+    flame(x, y, z, { life: 0.3, size: big ? 3.4 : small ? 1.0 : 1.7, grow: 0.5, cols: HT.hit });
+    flame(x, y, z, { life: 0.14, size: big ? 2.2 : 1.1, grow: 0.8, add: true, cols: HT.flash });
+    if (hero.id === 'rai' && !small) for (let i = 0; i < (big ? 4 : 2); i++) zap(x + rs(0.4), y + 9, z + rs(0.4), x, y, z, big ? 0.2 : 0.12);
+    if (hero.id === 'seori' && !small) for (let i = 0; i < (big ? 9 : 5); i++) { const a = i / (big ? 9 : 5) * Math.PI * 2, r = big ? 1.4 : 0.8; iceSpike(x + Math.cos(a) * r, z + Math.sin(a) * r, big ? 1.1 : 0.7); }
+    if (hero.id === 'sol' && !small) pillar(x, z, '#fff3a0', big ? 7 : 4);
     for (let i = 0; i < (big ? 8 : small ? 1 : 4); i++) flame(x + rs(0.5), y, z + rs(0.5), { vx: rs(0.6), vy: 1.2, vz: rs(0.6), life: 1.0, size: big ? 1.3 : 0.8, grow: 0.6, smoke: true });
-    if (!small) ring(x, z, big ? 6 : 2.6, big ? '#ff8a1a' : '#ff6a12', big ? 0.6 : 0.45);
-    burst(x, y, z, big ? 16 : 6, ['#ffd23f', '#ff7a1a', '#3a2a22'], big ? 1.4 : 0.9);
+    if (!small) ring(x, z, big ? 6 : 2.6, big ? HT.ring : HT.ring2, big ? 0.6 : 0.45);
+    burst(x, y, z, big ? 16 : 6, HT.bits, big ? 1.4 : 0.9);
     fireLight.position.set(x, y + 1, z);
     fireLightT = big ? 0.35 : 0.22; fireLightMax = big ? 70 : 30;
   }
@@ -1455,7 +1583,7 @@ const World = (() => {
     let obj;
     if (kind === 'enemy') { obj = Models.buildEnemy(id); if (id === 'dragon') obj.userData.wings.forEach(w => { w.rotation.x = 0.5 * w.scale.z; }); }
     else if (kind === 'tower') obj = Models.buildTower(id, opts.lvl || 1);
-    else obj = Models.buildHero();
+    else obj = Models.buildHero(id);
     if (kind === 'enemy' || kind === 'hero') obj.rotation.y = -0.6;
     pr.s.add(obj);
     const box = new T.Box3().setFromObject(obj);
@@ -1475,7 +1603,7 @@ const World = (() => {
     init, loadMap, resize, render, sync, project, pickSlot, pickHero, setTime, focusOn, focusing, portraitOf,
     get slots() { return slots; }, get pathLength() { return pathLength; }, get mapId() { return mapId; }, get night() { return env.night; },
     pathAt, CASTLE, castleTop, heroSpot, GATE, setGate, gateHit, gateShot, setTitleCam,
-    heroShoot, heroCast, heroUlt, heroMuzzle, fireArrow, fireRain, phoenixSweep, fireBurst,
+    heroShoot, heroCast, heroUlt, heroMuzzle, setHero, get heroId() { return hero.id; }, heroFx: () => HT, zap, iceSpike, fireArrow, fireRain, phoenixSweep, fireBurst,
     addEnemy, removeEnemy, clearEnemies, enemyHeadY, enemyCenterY,
     addTower, removeTower, upgradeTower, clearTowers, muzzle,
     addProjectile, removeProjectile, clearProjectiles,

@@ -93,6 +93,32 @@ const GD = (() => {
     lore: '왕국을 지키는 젊은 용사. 장궁에 구구단의 힘을 불어넣어 불화살을 쏴요. 연속으로 맞히면 3연발, 불사조 화살까지! 정답을 맞힐수록 힘이 모여 필살기 "용사의 심판"을 쓸 수 있어요.',
   };
 
+  // ---------------- 영웅 4명 (능력치는 모두 같고 모습·공격 연출만 달라요) ----------------
+  // map: 그 맵이 열리면 영웅도 함께 열림. tiers: 콤보 1~4 / 5~9 / 10~ 공격 이름
+  const HEROES = {
+    arin: {
+      name: '용사 아린', short: '아린', color: '#e5483b', icon: 'firearrow', ult: '용사의 심판', weapon: '불화살 장궁',
+      tiers: ['불화살', '불화살 3연발', '불사조 화살'],
+      lore: '왕국을 지키는 젊은 용사. 장궁에 구구단의 힘을 불어넣어 불화살을 쏴요. 연속으로 맞히면 3연발, 불사조 화살까지! 필살기 "용사의 심판"은 불사조가 길을 휩쓸고 불화살 비를 내려요.',
+    },
+    sol: {
+      name: '태양 기사 솔', short: '솔', color: '#f0a020', icon: 'sun', ult: '태양의 창', weapon: '황금 빛의 창', map: 'desert',
+      tiers: ['빛의 창', '빛의 창 3연발', '황금 독수리'],
+      lore: '사막의 태양 신전을 지키던 기사. 황금 창에 햇빛을 모아 빛의 창을 던져요. 콤보가 쌓이면 황금 독수리가 날아올라요. 필살기 "태양의 창"은 하늘에서 빛의 창을 쏟아부어요.',
+    },
+    seori: {
+      name: '서리 마법사 서리', short: '서리', color: '#3f86c6', icon: 'snow', ult: '눈보라 용', weapon: '얼음 수정 지팡이', map: 'snow',
+      tiers: ['얼음 수정', '얼음 수정 3연발', '서리 용'],
+      lore: '눈 덮인 봉우리에서 온 꼬마 마법사. 지팡이로 날카로운 얼음 수정을 날려요. 콤보가 쌓이면 서리 용을 불러내요. 필살기 "눈보라 용"은 거대한 얼음 용이 길을 얼려 버려요.',
+    },
+    rai: {
+      name: '번개 닌자 라이', short: '라이', color: '#8a4ae0', icon: 'bolt', ult: '천둥 폭풍', weapon: '번개 표창', map: 'volcano',
+      tiers: ['번개 표창', '번개 표창 3연발', '천둥 용'],
+      lore: '화산 너머 구름 위 마을의 닌자. 번개를 두른 표창을 순식간에 던져요. 콤보가 쌓이면 천둥 용이 날아가요. 필살기 "천둥 폭풍"은 하늘에서 번개가 쏟아져 내려요.',
+    },
+  };
+  const HERO_ORDER = ['arin', 'sol', 'seori', 'rai'];
+
   // ---------------- 난이도 ----------------
   const DIFFS = {
     easy: {
@@ -125,7 +151,7 @@ const GD = (() => {
   const MAPS = {
     forest: {
       name: '초록 숲 고개', icon: 'leaf', desc: '평화롭던 숲길로 어둠의 군대가 몰려와요.',
-      hp: 1, speed: 1,
+      hp: 1, speed: 1, scoreMul: 1,
       path: [[-25, -2.5], [-19, -3.2], [-14, -6.6], [-8.5, -5.6], [-5.6, -0.5], [-2, 4.6], [3.2, 5.2], [6.6, 0.6], [9.6, -5.2], [13.6, -5.4], [16.2, -1.2], [18.4, 0]],
       theme: {
         bg: '#2f7f5b', ground: ['#55b571', '#5bbb76', '#4faf6b'], path: ['#d2ae7c', '#ecd1a2'], pebble: '#c4a57a',
@@ -137,7 +163,7 @@ const GD = (() => {
     },
     desert: {
       name: '타오르는 사막', icon: 'sun', desc: '뜨거운 모래 언덕 사이 구불구불한 길.',
-      hp: 1.15, speed: 1.05, unlock: 'forest',
+      hp: 1.15, speed: 1.05, scoreMul: 1.05, unlock: 'forest',
       path: [[-25, 6.5], [-18, 6.8], [-12.5, 4.5], [-12, -1], [-14, -6], [-8, -7.2], [-3, -4.5], [-2, 1.5], [1, 6.5], [6.5, 6.8], [9.5, 2], [8.5, -3.5], [11.5, -6.8], [16, -5], [17.2, -1.5], [18.4, 0]],
       theme: {
         bg: '#d9a35c', ground: ['#e8c47e', '#efcd88', '#e2bb72'], path: ['#b98550', '#d6a66c'], pebble: '#a8763f',
@@ -149,7 +175,7 @@ const GD = (() => {
     },
     snow: {
       name: '얼어붙은 설원', icon: 'snow', desc: '눈보라 치는 설원. 미끄러운 얼음길을 지켜라!',
-      hp: 1.3, speed: 1.1, unlock: 'desert',
+      hp: 1.3, speed: 1.1, scoreMul: 1.1, unlock: 'desert',
       path: [[-25, -6.5], [-17, -6.8], [-11, -3.5], [-12.5, 2.5], [-8, 7], [-2, 5], [-0.5, -1], [3, -6.8], [9, -6.5], [10.5, -1], [8.5, 4.5], [12.5, 7.2], [16.5, 4.5], [18.4, 0]],
       theme: {
         bg: '#cfe2ee', ground: ['#eef5fa', '#e4eef6', '#f6fafd'], path: ['#9fb4c6', '#c4d4e2'], pebble: '#8aa0b4',
@@ -161,7 +187,7 @@ const GD = (() => {
     },
     volcano: {
       name: '불꽃 화산', icon: 'fire', desc: '용암이 흐르는 마왕의 땅. 최후의 결전!',
-      hp: 1.5, speed: 1.15, unlock: 'snow',
+      hp: 1.5, speed: 1.15, scoreMul: 1.15, unlock: 'snow',
       path: [[-25, 0.5], [-19.5, 0.5], [-16, 5.8], [-10, 7], [-7, 2.5], [-9.5, -3.5], [-5.5, -7.2], [0.5, -6], [2, -1], [-0.5, 4.5], [3.5, 7.4], [8.5, 6.2], [10.5, 1.2], [8.5, -4], [12.5, -7], [16.5, -4], [18.4, 0]],
       theme: {
         bg: '#3a2622', ground: ['#4a3a36', '#54423c', '#433430'], path: ['#7a5a4a', '#94705a'], pebble: '#ff7a2a',
@@ -173,6 +199,20 @@ const GD = (() => {
     },
   };
   const MAP_ORDER = ['forest', 'desert', 'snow', 'volcano'];
+
+  // ---------------- 점수 (랭킹) ----------------
+  // 처치 점수 = 적 기본 점수 × 웨이브 배수 × 콤보 배수 × (막타 1.2) × 맵 배수
+  // 맵 배수(scoreMul)는 뒤 맵의 튼튼한 적을 보정해서 맵마다 유불리가 없게 하는 값 (실제 기록을 보고 다시 맞출 수 있음)
+  const SCORE = {
+    base: { goblin: 100, soldier: 100, knight: 150, ogre: 250, troll: 350, boss: 2000, final: 10000 },
+    waveMul: w => 1 + w * 0.1,
+    comboMul: c => 1 + Math.min(c, 30) * 0.05,  // 최대 2.5배
+    finisher: 1.2,       // 탑이 지치게 한 적을 맞히면
+    shield: 0.3,         // 방패만 깬 정답
+    assist: 0.5,         // 필살기·연쇄 번개로 쓰러뜨림 (콤보 배수 없음)
+    clear: w => 500 * w, // 웨이브 클리어 보너스 (성이 안 다치면 1.5배)
+    perfect: 1.5,
+  };
 
   // ---------------- 웨이브 보상 카드 ----------------
   // rarity: common(일반) / rare(희귀) / epic(영웅)
@@ -257,5 +297,5 @@ const GD = (() => {
   };
 
   Object.entries(VARIANTS).forEach(([m, v]) => { MAPS[m].enemies = Object.fromEntries(ROLES.map(r => [r, v[r][0]])); });
-  return { TOWERS, LV_DMG, LV_RATE, LV_RANGE, ENEMIES, ROLES, VARIANTS, DEX_ENEMIES, BOSS_ORDER, FINAL_WAVE, HERO, DIFFS, MAPS, MAP_ORDER, CARDS, RARITY, ACH, TIERS, UPGRADES };
+  return { SCORE, TOWERS, LV_DMG, LV_RATE, LV_RANGE, ENEMIES, ROLES, VARIANTS, DEX_ENEMIES, BOSS_ORDER, FINAL_WAVE, HERO, HEROES, HERO_ORDER, DIFFS, MAPS, MAP_ORDER, CARDS, RARITY, ACH, TIERS, UPGRADES };
 })();

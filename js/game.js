@@ -5,10 +5,8 @@
   'use strict';
   Icons.mount();
   const I = Icons.html;
-  const { TOWERS, LV_DMG, LV_RATE, LV_RANGE, ENEMIES, ROLES, DEX_ENEMIES, BOSS_ORDER, FINAL_WAVE, HERO, DIFFS, MAPS, MAP_ORDER, CARDS, RARITY, ACH, TIERS, UPGRADES } = GD;
+  const { SCORE, TOWERS, LV_DMG, LV_RATE, LV_RANGE, ENEMIES, ROLES, DEX_ENEMIES, BOSS_ORDER, FINAL_WAVE, HERO, HEROES, HERO_ORDER, DIFFS, MAPS, MAP_ORDER, CARDS, RARITY, ACH, TIERS, UPGRADES } = GD;
 
-  const OLD_SAVE_KEY = 'gugudan-defense-save-v1';
-  const SAVE_KEY = 'gugudan-defense-saves'; // 맵마다 따로 저장: { last, maps: { forest: {...}, ... } }
   const SOUND_KEY = 'gugudan-defense-muted';
   const CROSS_TIME = 24;          // 첫 맵 기준, 1웨이브 병사가 길 끝까지 가는 시간(초)
   const BASE_SPEED = 59.6 / CROSS_TIME; // 월드 단위/초
@@ -248,9 +246,37 @@
     if (e.exhausted) return;
     e.exhausted = true;
   }
+  // ================= 점수 (랭킹) =================
+  function baseScore(e) { const d = e.def; return d.final ? SCORE.base.final : d.boss ? SCORE.base.boss : (SCORE.base[d.role || e.type] || 100); }
+  // how: 'answer'(정답) / 'shield'(방패만 깸) / 'assist'(필살기·연쇄 번개)
+  function scoreFor(e, how, combo, finisher) {
+    let v = baseScore(e) * SCORE.waveMul(S.wave) * (MAPD().scoreMul || 1);
+    if (how === 'assist') v *= SCORE.assist;
+    else {
+      v *= SCORE.comboMul(combo || 0);
+      if (finisher) v *= SCORE.finisher;
+      if (how === 'shield') v *= SCORE.shield;
+    }
+    return Math.round(v);
+  }
+  function addScore(n, x, y, z) {
+    if (!(n > 0)) return;
+    S.score += n;
+    if (S.ws) S.ws.score = (S.ws.score || 0) + n;
+    if (x != null) floater(x, y, z, `★${n.toLocaleString('ko-KR')}`, '#ffffff', 15);
+    updateScore();
+  }
+  function updateScore() {
+    const el = $('scoreBox');
+    if (el) el.innerHTML = `<small>점수</small><b>${(S.score || 0).toLocaleString('ko-KR')}</b>`;
+  }
+
   function kill(e) {
     if (e.dead) return;
     e.dead = true;
+    // 정답으로 쓰러뜨리면 그때 콤보·막타 기준, 필살기·연쇄 번개는 절반 (콤보 없음)
+    if (e.scoreHow) addScore(scoreFor(e, e.scoreHow, e.scoreCombo, e.scoreFinisher), e.x, World.enemyHeadY(e) + 1.6, e.z);
+    else addScore(scoreFor(e, 'assist'), e.x, World.enemyHeadY(e) + 1.6, e.z);
     const gems = Math.max(1, Math.round(e.def.gems * MOD.gemMul * (e.def.boss ? MOD.bossGem : 1)));
     S.gems += gems;
     S.stats.kills++;
@@ -400,6 +426,11 @@
   function knock(e, units, force) { if (e.exhausted && !force) return; e.t = Math.max(0, e.t - units / World.pathLength); }
 
   // ================= 영웅 =================
+  function heroSfx(kind, tier) {
+    const id = World.heroId;
+    if (id === 'arin') Sound.play(kind === 'heroShot' ? 'fireShot' : 'fireHit', tier);
+    else Sound.play(kind, id, tier);
+  }
   function heroDmg() { return HERO.dmg * (1 + 0.3 * S.up.hero) * (1 + MOD.heroDmg) * (1 + 0.1 * (S.wave - 1)); }
   function updateHero(dt) {
     S.heroCd -= dt;
@@ -427,27 +458,39 @@
     Profile.ult();
     World.heroUlt();
     Sound.play('ult');
-    showBanner(`${I('firearrow')} 용사의 심판!`, 'good', 1600);
-    // 하늘이 붉게 어두워지고, 모든 적이 겁에 질려 멈춤
+    const H = HEROES[World.heroId], fxc = World.heroFx();
+    showBanner(`${I(H.icon)} ${H.ult}!`, 'good', 1600);
+    // 하늘이 영웅의 색으로 어두워지고, 모든 적이 겁에 질려 멈춤
     const dim = $('ultDim');
+    dim.style.background = `radial-gradient(ellipse at 50% 40%, ${fxc.dim})`;
     dim.classList.remove('on'); void dim.offsetWidth; dim.classList.add('on');
     S.shake = Math.max(S.shake, 6);
     const hs = World.heroSpot;
-    World.pillar(hs.x, hs.z, '#ff7a1a', 12);
+    World.pillar(hs.x, hs.z, fxc.ring, 12);
     World.fireBurst(hs.x, 1.2, hs.z, 50, 9, 0.55);
-    World.ring(hs.x, hs.z, 10, '#ff8a1a', 0.8);
+    World.ring(hs.x, hs.z, 10, fxc.ring, 0.8);
     S.enemies.forEach(e => { e.stun = Math.max(e.stun, 2.6); });
     S.timers.push({ t: 0.45, fn: () => World.phoenixSweep(1.1) });
     S.timers.push({ t: 0.75, fn: ultImpact });
   }
   function ultImpact() {
     S.white = 0.35; S.shake = 18; S.hitStop = 0.1;
-    Sound.play('fireHit', 'phoenix');
+    heroSfx('heroHit', 'phoenix');
     const pow = 1 + MOD.ultPow;
-    // 길 전체에 불화살 비
+    // 길 전체에 불화살 비 (영웅마다: 빛의 창 / 얼음 수정 / 번개 표창)
     for (let i = 0; i < 22; i++) {
       const p = World.pathAt(Math.random());
       World.fireRain(p.x + (Math.random() - 0.5) * 3, p.z + (Math.random() - 0.5) * 3, Math.random() * 0.9, null);
+    }
+    const hid = World.heroId;
+    for (let i = 0; i < 16; i++) {
+      const k = i / 16, d = Math.random() * 0.8;
+      S.timers.push({ t: d, fn: () => {
+        const p = World.pathAt(k + Math.random() / 16);
+        if (hid === 'rai') World.zap(p.x + (Math.random() - 0.5) * 2, 16, p.z + (Math.random() - 0.5) * 2, p.x, 0.2, p.z, 0.22);
+        else if (hid === 'seori') World.iceSpike(p.x + (Math.random() - 0.5) * 2.5, p.z + (Math.random() - 0.5) * 2.5, 1.4 + Math.random());
+        else if (hid === 'sol') World.pillar(p.x, p.z, '#fff3a0', 9);
+      } });
     }
     // 적마다 불화살 세 발: 마지막 화살이 꽂히면 처치 (보스는 정답 1개 분량)
     S.enemies.slice().sort((a, b) => b.t - a.t).forEach((e, i) => {
@@ -575,27 +618,35 @@
     const last = e.def.probs <= 1 || e.probsLeft <= 1;
     // 방패 규칙(보통 이상): 마지막 한 방은 '막타!'(지친) 상태일 때만. 아니면 이번 정답은 방패만 깨고 새 문제가 나옴
     const shieldBreak = last && D().shield2 && !e.exhausted;
-    const finisher = e.exhausted ? 1.5 : shieldBreak ? 0.6 : 1; // 지친 적에게 막타 보너스, 방패 깨기는 골드 조금
-    const gold = Math.round((4 + e.q.a) * (1 + 0.15 * S.up.bounty) * D().gold * (MOD.danGold[e.q.a] ? 2 : 1) * finisher) + comboBonus;
-    S.gold += gold;
-    if (S.ws) S.ws.gold += gold;
-    const c = enemyCenter(e);
-    floater(c.x, World.enemyHeadY(e) + 0.4, c.z, finisher > 1 ? `막타 +${gold}` : `+${gold}`, '#ffd34a', shieldBreak ? 18 : 24, 'coin');
+    // 골드는 적을 쓰러뜨린 정답에만: 보통 이상은 지친 적(막타!)을 쓰러뜨릴 때만, 쉬움은 쓰러뜨리면 언제나
+    // (방패만 깬 정답, 여러 번 맞혀야 하는 적의 중간 정답은 골드 없음)
+    const earns = last && !shieldBreak && (e.exhausted || !D().shield2);
+    if (earns) {
+      const finisher = e.exhausted ? 1.5 : 1; // 지친 적에게 막타 보너스
+      const gold = Math.round((4 + e.q.a) * (1 + 0.15 * S.up.bounty) * D().gold * (MOD.danGold[e.q.a] ? 2 : 1) * finisher) + comboBonus;
+      S.gold += gold;
+      if (S.ws) S.ws.gold += gold;
+      const c = enemyCenter(e);
+      floater(c.x, World.enemyHeadY(e) + 0.4, c.z, e.exhausted ? `막타 +${gold}` : `+${gold}`, '#ffd34a', 24, 'coin');
+    }
     // 영웅이 장궁으로 불화살을 쏨: 콤보 1~4 불화살, 5~9 3연발, 10부터 불사조 화살
     const tier = S.combo >= 10 ? 'phoenix' : S.combo >= 5 ? 'volley' : 'arrow';
     World.heroShoot(e.x, e.z);
     Sound.play('correct', S.combo);
-    Sound.play('fireShot', tier);
+    heroSfx('heroShot', tier);
     flashBox('right');
     addGauge(0.05 * (1 + 0.05 * S.up.hero) * (1 + MOD.heroCharge)); // 정답 약 20개면 가득
     const lethal = last && !shieldBreak;
-    if (lethal) e.doomed = true; // 화살이 꽂힐 때까지 다른 답의 대상이 되지 않음
+    const wasExhausted = e.exhausted, comboAt = S.combo;
+    if (lethal) { e.doomed = true; e.scoreHow = 'answer'; e.scoreCombo = comboAt; e.scoreFinisher = wasExhausted; } // 화살이 꽂힐 때까지 다른 답의 대상이 되지 않음
     else if (shieldBreak) {
+      addScore(scoreFor(e, 'shield', comboAt, false));
       exhaust(e);
       e.hp = Math.min(e.hp, hpFloor(e) + e.maxHp * 0.0001);
       e.q = makeProblem(e.def.boss);
       e.hint = false;
     } else {
+      addScore(Math.round(scoreFor(e, 'answer', comboAt, wasExhausted) * 0.5 / e.def.probs)); // 여러 번 맞혀야 하는 적의 중간 정답
       const per = e.maxHp / e.def.probs;
       e.probsLeft--;
       e.hp = Math.min(e.hp, e.probsLeft * per);
@@ -604,7 +655,7 @@
       e.hint = false;
     }
     World.fireArrow(e, tier, pos => {
-      Sound.play('fireHit', tier);
+      heroSfx('heroHit', tier);
       if (tier === 'phoenix') {
         S.shake = Math.max(S.shake, 7);
         // 불사조의 불길: 주변 적을 지치게 만듦 (마지막 한 방은 여전히 정답만)
@@ -767,6 +818,8 @@
     S.castleHp = Math.min(max, S.castleHp + Math.round(max * 0.1));
     const stars = ws.dmg === 0 ? 3 : ws.dmg <= max * 0.15 ? 2 : 1;
     if (stars === 3) Profile.perfectWave();
+    const clearScore = Math.round(SCORE.clear(S.wave) * (stars === 3 ? SCORE.perfect : 1) * (MAPD().scoreMul || 1));
+    addScore(clearScore);
     Sound.play('victory');
     World.setGate(false);
     setTimeout(() => Sound.play('gateOpen'), 400);
@@ -781,8 +834,10 @@
     S.ws = null;
     enterPrep();
     if (clearedNow) showClear();
-    else showResults({ wave: clearedWave, stars, bonus, ws });
+    else showResults({ wave: clearedWave, stars, bonus, ws, clearScore });
+    submitScore();
     newMaps.forEach((m, i) => setTimeout(() => announceMap(m), 600 + i * 900));
+    HERO_ORDER.filter(h => newMaps.includes(HEROES[h].map)).forEach((h, i) => setTimeout(() => announceHero(h), 1500 + i * 900));
   }
   // 새 맵이 열렸을 때 크게 알림
   function announceMap(id) {
@@ -794,6 +849,15 @@
     Sound.play('achieve');
     setTimeout(() => t.remove(), 5500);
   }
+  function announceHero(id) {
+    const H = HEROES[id];
+    const t = document.createElement('div');
+    t.className = 'toast map-toast';
+    t.innerHTML = `<div class="medal" style="background:${H.color}">${I(H.icon)}</div><div><small>새 영웅이 합류했어요!</small><b>${H.name}</b><small class="sub">처음 화면 → 영웅에서 고를 수 있어요</small></div>`;
+    $('toasts').appendChild(t);
+    Sound.play('achieve');
+    setTimeout(() => t.remove(), 5500);
+  }
   function gameOver() {
     if (S.mode === 'over') return;
     S.mode = 'over';
@@ -801,7 +865,8 @@
     Sound.play('lose');
     updateControls();
     Profile.record(S.map, S.lowest, S.wave - 1, false);
-    const sv = loadSave(S.map);
+    submitScore();
+    const sv = loadSave(S.runId);
     $('retryWave').textContent = sv ? sv.wave : S.wave;
     $('goStats').innerHTML =
       `${MAPD().name} · ${D().name} · 웨이브 <b>${S.wave}</b>에서 쓰러졌습니다.<br>정답 ${S.stats.correct}개 · 처치 ${S.stats.kills}마리 · 최고 콤보 ${S.bestCombo}`;
@@ -821,46 +886,19 @@
 
   // ================= 저장 / 불러오기 =================
   function lsGet(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
+  // 게임 한 판 = 저장 하나 (js/account.js가 이 기기와 서버에 함께 보관)
   function save() {
     if (S.mode !== 'prep') return;
-    const data = {
-      v: 3, map: S.map, diff: S.diff, lowest: S.lowest, cleared: S.cleared, wave: S.wave, gold: S.gold, gems: S.gems, castleHp: S.castleHp,
+    if (!S.runId) S.runId = Account.newRunId();
+    Account.putRun({
+      v: 3, id: S.runId, map: S.map, diff: S.diff, lowest: S.lowest, cleared: S.cleared, wave: S.wave, gold: S.gold, gems: S.gems, castleHp: S.castleHp,
       up: S.up, towers: S.towers.map(t => ({ slot: t.slot, type: t.type, lvl: t.lvl, paid: t.paid })),
       cards: S.cards, pendingCards: S.pendingCards, heroGauge: S.heroGauge,
-      stats: S.stats, bestCombo: S.bestCombo, savedAt: Date.now(),
-    };
-    const all = readSaves();
-    all.maps[S.map] = data;
-    all.last = S.map;
-    writeSaves(all);
+      stats: S.stats, bestCombo: S.bestCombo, score: S.score || 0, ranked: !!S.ranked, savedAt: Date.now(),
+    });
   }
-  function writeSaves(all) {
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(all)); } catch (_) { /* 저장 불가 */ }
-  }
-  function readSaves() {
-    let all = null;
-    try { all = JSON.parse(lsGet(SAVE_KEY)); } catch (_) { all = null; }
-    if (!all || typeof all.maps !== 'object' || !all.maps) all = { last: null, maps: {} };
-    // 예전 버전(저장 칸 1개) → 그 맵의 저장 칸으로 옮기기
-    const old = lsGet(OLD_SAVE_KEY);
-    if (old) {
-      const d = upgradeSave(old);
-      if (d && !all.maps[d.map]) { all.maps[d.map] = d; all.last = all.last || d.map; }
-      writeSaves(all);
-      try { localStorage.removeItem(OLD_SAVE_KEY); } catch (_) { /* 무시 */ }
-    }
-    return all;
-  }
-  // map을 주면 그 맵의 저장, 안 주면 가장 최근에 한 맵의 저장
-  function loadSave(map) {
-    const all = readSaves();
-    const id = map || all.last;
-    return id && all.maps[id] ? upgradeSave(all.maps[id]) : null;
-  }
-  // 저장된 맵 목록 (최근 순)
-  function allSaves() {
-    return MAP_ORDER.map(m => loadSave(m)).filter(Boolean).sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-  }
+  function loadSave(id) { const d = Account.getRun(id); return d ? upgradeSave(d) : null; }
+  function allSaves() { return Account.listRuns().map(upgradeSave).filter(Boolean); }
   function upgradeSave(raw) {
     try {
       const d = typeof raw === 'string' ? JSON.parse(raw) : JSON.parse(JSON.stringify(raw));
@@ -870,7 +908,7 @@
         d.towers = []; d.v = 2;
       }
       if (d.v === 2) { d.map = 'forest'; (d.towers || []).forEach(t => { t.lvl = 1; }); d.cards = []; d.v = 3; }
-      if (d.v === 3) { if (!MAPS[d.map]) d.map = 'forest'; return d; }
+      if (d.v === 3) { if (!MAPS[d.map]) d.map = 'forest'; if (!DIFFS[d.diff]) d.diff = 'normal'; return d; }
     } catch (_) { /* 무시 */ }
     return null;
   }
@@ -881,11 +919,12 @@
   }
   function newGame(diff, map) {
     clearField(true);
+    S.runId = Account.newRunId();
     S.diff = S.lowest = DIFFS[diff] ? diff : 'normal';
     useMap(MAPS[map] ? map : 'forest');
     Object.assign(S, {
       cleared: false, wave: 1, gems: 0, up: emptyUp(), towers: [], cards: [], pendingCards: null,
-      heroGauge: 0, stats: { kills: 0, correct: 0, wrong: 0 }, bestCombo: 0,
+      heroGauge: 0, stats: { kills: 0, correct: 0, wrong: 0 }, bestCombo: 0, score: 0, ranked: true,
     });
     computeMods();
     S.gold = D().startGold;
@@ -896,6 +935,7 @@
   }
   function loadGame(d, fullHp) {
     clearField(true);
+    S.runId = d.id || Account.newRunId();
     S.diff = DIFFS[d.diff] ? d.diff : 'normal';
     S.lowest = DIFFS[d.lowest] ? d.lowest : S.diff;
     useMap(MAPS[d.map] ? d.map : 'forest');
@@ -903,6 +943,7 @@
       cleared: !!d.cleared, wave: d.wave, gold: d.gold, gems: d.gems,
       up: Object.assign(emptyUp(), d.up), towers: [], cards: d.cards || [], pendingCards: d.pendingCards || null,
       heroGauge: d.heroGauge || 0, stats: d.stats || { kills: 0, correct: 0, wrong: 0 }, bestCombo: d.bestCombo || 0,
+      score: d.score || 0, ranked: !!d.ranked, // 랭크제 이후에 시작한 판만 랭킹에 들어감
     });
     computeMods();
     (d.towers || []).forEach(t => {
@@ -1096,6 +1137,7 @@
   const skillBtns = [...document.querySelectorAll('.skill')];
   let lastHud = '';
   function updateHud(force) {
+    if (force) updateScore();
     const max = castleMax();
     const g = Math.round(S.heroGauge * 100);
     const key = `${S.castleHp}|${max}|${S.gold}|${S.gems}|${S.wave}|${S.combo}|${S.mode}|${S.enemies.length > 0}|${g}`;
@@ -1173,20 +1215,204 @@
     setTimeout(() => t.remove(), 4000);
   });
 
+  const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+  // ================= 로그인 (학교 + 닉네임 + 숫자 4자리) =================
+  let lgSchool = null;
+  function lgMsg(text, ok) { $('lgMsg').textContent = text || ''; $('lgMsg').classList.toggle('ok', !!ok); }
+  function lgShowCreate(on) {
+    $('lgPin2Wrap').classList.toggle('hidden', !on);
+    $('lgCreate').classList.toggle('hidden', !on);
+    if (!on) $('lgPin2').value = '';
+  }
+  function lgPickSchool(sc) {
+    lgSchool = sc;
+    $('lgSchool').classList.toggle('hidden', !!sc);
+    $('lgResults').classList.add('hidden');
+    $('lgPicked').classList.toggle('hidden', !sc);
+    if (sc) {
+      $('lgPicked').innerHTML = `<span>${esc(sc.name)}<small>${esc(Account.placeOf(sc))}</small></span><button type="button" id="lgReSchool">바꾸기</button>`;
+      $('lgReSchool').onclick = () => { lgPickSchool(null); $('lgSchool').value = ''; $('lgSchool').focus(); };
+      if (!$('lgNick').value) $('lgNick').focus();
+    }
+    lgShowCreate(false);
+  }
+  function lgSearch() {
+    const q = $('lgSchool').value.trim();
+    const box = $('lgResults');
+    if (!q) { box.classList.add('hidden'); return; }
+    Account.loadSchools().then(() => {
+      if ($('lgSchool').value.trim() !== q) return;
+      const list = Account.searchSchools(q, 30);
+      box.innerHTML = list.length
+        ? list.map((sc, i) => `<button type="button" data-i="${i}">${esc(sc.name)}<small>${esc(Account.placeOf(sc))}</small></button>`).join('')
+        : `<div class="empty">"${esc(q)}"(으)로 찾은 학교가 없어요. 학교 이름을 다시 확인해 주세요.</div>`;
+      box.classList.remove('hidden');
+      box.querySelectorAll('[data-i]').forEach(b => b.onclick = () => lgPickSchool(list[+b.dataset.i]));
+    }).catch(() => lgMsg('학교 목록을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.'));
+  }
+  function lgValues() {
+    const nick = Account.cleanNick($('lgNick').value), pin = $('lgPin').value.trim();
+    if (!lgSchool) { lgMsg('학교를 검색해서 골라 주세요.'); $('lgSchool').focus(); return null; }
+    if (nick.length < 2) { lgMsg('닉네임은 2글자 이상 적어 주세요.'); $('lgNick').focus(); return null; }
+    if (!/^\d{4}$/.test(pin)) { lgMsg('비밀번호는 숫자 4자리예요.'); $('lgPin').focus(); return null; }
+    return { nick, pin };
+  }
+  function lgBusy(on) { $('lgGo').disabled = on; $('lgCreate').disabled = on; }
+  async function lgLogin(ev) {
+    if (ev) ev.preventDefault();
+    Sound.init();
+    const v = lgValues(); if (!v) return;
+    lgBusy(true); lgMsg('확인하는 중…', true);
+    const r = await Account.login(lgSchool.code, v.nick, v.pin);
+    lgBusy(false);
+    if (r.ok) return afterLogin();
+    if (r.code === 'no_account') {
+      lgMsg(`${Account.shortSchool(lgSchool.name)}에 "${v.nick}" 계정이 없어요. 처음이면 비밀번호를 한 번 더 적고 새 계정을 만들어요.`);
+      lgShowCreate(true); $('lgPin2').focus();
+      return;
+    }
+    lgMsg(r.error || '들어가지 못했어요. 다시 해 주세요.');
+    if (r.code === 'wrong_pin') { $('lgPin').value = ''; $('lgPin').focus(); }
+  }
+  async function lgCreate() {
+    Sound.init();
+    const v = lgValues(); if (!v) return;
+    if ($('lgPin2').value.trim() !== v.pin) { lgMsg('두 비밀번호가 달라요. 같은 숫자 4자리를 적어 주세요.'); $('lgPin2').value = ''; $('lgPin2').focus(); return; }
+    await Account.loadProfanity();
+    if (Account.hasProfanity(v.nick)) { lgMsg('사용할 수 없는 말이 들어 있어요. 다른 닉네임을 적어 주세요.'); $('lgNick').focus(); return; }
+    lgBusy(true); lgMsg('계정을 만드는 중…', true);
+    const r = await Account.register(lgSchool.code, v.nick, v.pin);
+    lgBusy(false);
+    if (r.ok) return afterLogin(true);
+    lgMsg(r.error || '계정을 만들지 못했어요. 다시 해 주세요.');
+  }
+  function openLogin() {
+    S.mode = 'title';
+    hide('title');
+    lgMsg(''); lgShowCreate(false);
+    $('lgPin').value = '';
+    show('login');
+    Account.loadSchools().catch(() => {});
+  }
+  function afterLogin(created) {
+    hide('login');
+    $('lgPin').value = ''; $('lgPin2').value = '';
+    lgMsg('');
+    show('title');
+    Profile.useOwner(Account.owner);
+    refreshTitle();
+    showBanner(`${I('star')} ${created ? '새 계정을 만들었어요!' : '어서 와요,'} ${esc(Account.account.nick)}`, 'good', 1800);
+    syncAll();
+  }
+  // 저장 목록과 플레이 기록(열린 맵·영웅·업적)을 서버와 맞춤
+  function syncAll() {
+    return Promise.all([Account.sync(), Account.syncProfile()]).then(() => { refreshTitle(); titleNotices(); });
+  }
+  $('loginForm').addEventListener('submit', lgLogin);
+  $('lgCreate').onclick = lgCreate;
+  $('lgSchool').addEventListener('input', () => { clearTimeout(lgSearch.t); lgSearch.t = setTimeout(lgSearch, 150); });
+  ['lgPin', 'lgPin2'].forEach(id => $(id).addEventListener('input', () => { $(id).value = $(id).value.replace(/\D/g, '').slice(0, 4); }));
+  $('lgNick').addEventListener('input', () => lgShowCreate(false));
+
   function refreshTitle() {
     const saves = allSaves(), sv = saves[0];
     const btn = $('btnContinue');
     if (sv) {
       btn.classList.remove('hidden');
       const dd = DIFFS[sv.diff] || DIFFS.normal, mm = MAPS[sv.map] || MAPS.forest;
-      $('continueInfo').textContent = saves.length > 1 ? `저장된 맵 ${saves.length}개` : `${mm.name} · ${dd.name} · 웨이브 ${sv.wave}`;
+      $('continueInfo').textContent = saves.length > 1 ? `저장 ${saves.length}개 · 최근 ${mm.name} ${dd.name} ${sv.wave}웨이브` : `${mm.name} · ${dd.name} · 웨이브 ${sv.wave}`;
     } else btn.classList.add('hidden');
+    const ac = Account.account;
+    $('acctBar').classList.toggle('hidden', !ac);
+    if (ac) {
+      $('acctBar').innerHTML = `${I('home')} <span>${esc(Account.shortSchool(ac.schoolName))} · <b>${esc(ac.nick)}</b></span><button id="btnLogout" type="button">로그아웃</button>`;
+      $('btnLogout').onclick = () => {
+        const b = $('btnLogout');
+        if (!b.classList.contains('confirm')) { b.classList.add('confirm'); b.textContent = '정말 로그아웃?'; return; }
+        Account.pushProfile().then(() => Account.logout()).then(() => { Profile.useOwner('guest'); hide('title'); openLogin(); });
+      };
+    }
+    World.setHero(Profile.hero());
+    heroStrip();
     const stars = MAP_ORDER.reduce((s, m) => s + Profile.bestStars(m), 0);
     const open = MAP_ORDER.filter(m => Profile.unlocked(m)).length;
     loadPlayerStats();
     $('bestInfo').innerHTML = `${I('map')} 열린 맵 ${open}/4 · ${I('star')} 별 ${stars}/12 · ${I('trophy')} 업적 ${Profile.achCount()}/${ACH.length}`;
     $('achCount').textContent = `${Profile.achCount()}/${ACH.length}`;
   }
+  // ================= 영웅 고르기 =================
+  const josaWa = w => ((w.charCodeAt(w.length - 1) - 0xAC00) % 28 ? '과' : '와');
+  function heroStrip() {
+    const id = Profile.hero(), H = HEROES[id];
+    $('heroBtn').querySelector('.face').innerHTML = I(H.icon);
+    const open = HERO_ORDER.filter(h => Profile.heroUnlocked(h)).length;
+    $('btnHero').innerHTML = `<img src="${World.portraitOf('hero', id)}" alt=""><span><small>함께하는 영웅</small><b style="color:${H.color}">${H.name}</b></span><em>영웅 고르기 <b>${open}/${HERO_ORDER.length}</b></em>`;
+  }
+  function useHero(id) {
+    Profile.setHero(id);
+    World.setHero(Profile.hero());
+    heroStrip();
+  }
+  function openHeroes(focus) {
+    Sound.init();
+    hide('title');
+    focus = HEROES[focus] ? focus : Profile.hero();
+    const cur = Profile.hero();
+    const cards = HERO_ORDER.map(id => {
+      const H = HEROES[id], ok = Profile.heroUnlocked(id);
+      return `<button class="hero-card ${ok ? '' : 'lock'} ${id === focus ? 'focus' : ''} ${id === cur ? 'on' : ''}" data-hero="${id}" style="--hc:${H.color}">
+        ${id === cur ? `<span class="badge">함께하는 중</span>` : ''}
+        <img src="${World.portraitOf('hero', id, { dark: !ok })}" alt="">
+        <small class="ht">${ok ? H.name.slice(0, -H.short.length).trim() : ''}</small><b>${ok ? H.short : '???'}</b><small>${ok ? '' : `${I('lock')} ${MAPS[H.map].name}`}</small></button>`;
+    }).join('');
+    const H = HEROES[focus], ok = Profile.heroUnlocked(focus);
+    const info = ok
+      ? `<h3 style="color:${H.color}">${I(H.icon)} ${H.name}</h3><p>${H.lore}</p>
+         <div class="hero-moves"><span>정답 공격</span><b>${H.tiers.join(' → ')}</b><span>필살기</span><b>${H.ult}</b></div>
+         ${focus === cur ? `<p class="hero-on">${I('check')} 지금 함께하고 있어요</p>` : `<button class="big-btn" id="heroPick">${I('hero')} ${H.short}${josaWa(H.short)} 함께하기</button>`}`
+      : `<h3>${I('lock')} 아직 잠겨 있어요</h3><p><b>${MAPS[H.map].name}</b> 맵이 열리면 새 영웅이 합류해요. 앞 맵에서 10웨이브를 넘겨 보세요!</p>`;
+    openModal(`${I('hero')} 영웅`, `<div class="hero-grid">${cards}</div><div class="hero-info">${info}</div>
+      <p class="stat-line" style="font-size:12.5px;color:#6b7a88">영웅마다 모습과 공격 연출이 달라요. 힘은 모두 같아서 랭킹에도 공평해요.</p>`);
+    mball('[data-hero]').forEach(b => b.onclick = () => { Sound.play('key'); openHeroes(b.dataset.hero); });
+    const pick = mb('#heroPick');
+    if (pick) pick.onclick = () => { useHero(focus); Sound.play('pick'); openHeroes(focus); };
+  }
+
+  // ================= 처음 화면 알림 (업데이트 안내 · 새 영웅) =================
+  const NOTICE_VER = 2;
+  function titleNotices() {
+    if (S.mode !== 'title' || modalOpen || !$('login').classList.contains('hidden')) return;
+    const P = Profile.data;
+    if ((P.notice || 0) < NOTICE_VER) {
+      P.notice = NOTICE_VER; Profile.flush();
+      hide('title');
+      openModal(`${I('crown')} 큰 업데이트!`, `<div class="notice">
+        <div class="nt"><span>${I('crown')}</span><div><b>랭킹이 생겼어요</b><small>적을 쓰러뜨리면 점수를 얻어요. 난이도마다 <b>한 판 최고 점수</b>로 전체 · 우리 학교 순위를 매겨요. 처음 화면의 <b>랭킹</b>에서 확인!</small></div></div>
+        <div class="nt"><span>${I('lock')}</span><div><b>학교 · 닉네임 · 비밀번호 4자리로 들어가요</b><small>비밀번호는 꼭 기억해 두세요. <b>10번 틀리면 10분 동안 잠겨요.</b> 잊어버리면 새 닉네임으로 다시 만들어야 해요.</small></div></div>
+        <div class="nt"><span>${I('scroll')}</span><div><b>저장 방법이 바뀌었어요</b><small>게임 한 판마다 저장이 하나씩 생겨요. <b>이어하기</b>에서 골라 이어하고, <b>다른 기기</b>에서도 같은 계정으로 들어가면 이어할 수 있어요.</small></div></div>
+        <div class="nt"><span>${I('hero')}</span><div><b>새 영웅 3명!</b><small>사막 · 설원 · 화산 맵을 열 때마다 새 영웅이 합류해요. 처음 화면의 <b>영웅</b>에서 골라요.</small></div></div>
+        <button class="big-btn" id="noticeOk">${I('play')} 알겠어요!</button></div>`);
+      mb('#noticeOk').onclick = () => { closeModal(); show('title'); setTimeout(titleNotices, 300); };
+      return;
+    }
+    const fresh = Profile.newHeroes();
+    if (fresh.length) {
+      const id = fresh[0], H = HEROES[id];
+      Profile.markHeroSeen(id);
+      hide('title');
+      Sound.play('evolve');
+      openModal(`${I('star')} 새 영웅 합류!`, `<div class="hero-join" style="--hc:${H.color}">
+        <div class="hj-art"><img src="${World.portraitOf('hero', id)}" alt=""></div>
+        <h3>${I(H.icon)} ${H.name}</h3>
+        <p><b>${MAPS[H.map].name}</b> 맵이 열려서 새 영웅이 왔어요!</p><p class="lore">${H.lore}</p>
+        <button class="big-btn" id="hjUse">${I('hero')} 바로 함께하기</button>
+        <button class="big-btn alt" id="hjLater">나중에 고를래요</button></div>`);
+      mb('#hjUse').onclick = () => { useHero(id); Sound.play('pick'); closeModal(); show('title'); setTimeout(titleNotices, 300); };
+      mb('#hjLater').onclick = () => { closeModal(); show('title'); setTimeout(titleNotices, 300); };
+    }
+  }
+
   // ================= QR코드로 공유 (교실용) =================
   // 게임 주소를 QR코드로 보여 줌. 서버에서 열었으면 그 주소, 파일로 열었으면 배포 주소
   const HOME_URL = 'https://multiplication-defense.chaessam.workers.dev/';
@@ -1285,6 +1511,7 @@
     refreshTitle();
     show('title');
     updateHud(true);
+    setTimeout(titleNotices, 500);
   }
 
   // ---------- 모달 ----------
@@ -1296,6 +1523,7 @@
   }, true);
   function openModal(title, html, opts = {}) {
     modalOpenedAt = performance.now();
+    delete $('modalTitle').dataset.kind;
     $('modalTitle').innerHTML = title;
     $('modalBody').innerHTML = html;
     $('modalClose').classList.toggle('hidden', !!opts.noClose);
@@ -1441,7 +1669,10 @@
         <span>${I('heart')} 성 피해</span><b>${r.ws.dmg}</b>
         <span>${I('coin')} 정답 골드</span><b class="gold">+${r.ws.gold}</b>
         <span>${I('crown')} 승리 보너스</span><b class="gold">+${r.bonus}</b>
+        <span>${I('star')} 이번 웨이브 점수</span><b class="score">+${((r.ws.score || 0)).toLocaleString('ko-KR')}</b>
+        <span>${I('trophy')} 총 점수</span><b class="score">${(S.score || 0).toLocaleString('ko-KR')}</b>
       </div>
+      <p class="rank-note" id="rankNote">${S.ranked && Account.account ? '랭킹에 기록하는 중…' : !S.ranked ? '예전 저장으로 이어한 판이라 랭킹에는 들어가지 않아요.' : ''}</p>
       <button class="big-btn" id="toCards">${I('card')} 보상 카드 고르기</button>`;
     openModal(`웨이브 ${r.wave} 승리!`, html, { noClose: true });
     for (let i = 0; i < r.stars; i++) setTimeout(() => Sound.play('star', i), 300 + i * 250);
@@ -1523,15 +1754,13 @@
     x.fillStyle = '#d9493c'; x.beginPath(); x.moveTo(cx - 3, cy); x.lineTo(cx + 8, cy - 12); x.lineTo(cx + 19, cy); x.fill();
   }
   function openMapSelect(diff) {
-    const saved = {};
-    MAP_ORDER.forEach(m => { const d = loadSave(m); if (d && DIFFS[d.diff]) saved[m] = d; });
     const html = `<div class="maps">${MAP_ORDER.map(id => {
       const m = MAPS[id], ok = Profile.unlocked(id), rec = Profile.rec(id, diff);
       return `<button class="mapc ${ok ? '' : 'locked'}" data-map="${id}" ${ok ? '' : 'disabled'}>
         <canvas width="240" height="120" data-prev="${id}"></canvas>
         <div class="info"><b>${I(m.icon)} ${m.name}</b><small>${m.desc}</small>
           ${starsHtml(Profile.stars(id, diff))}<small>${rec.cleared ? '클리어!' : rec.best ? `최고 웨이브 ${rec.best}` : '도전 전'}</small>
-          ${ok && saved[id] ? `<span class="saved-tag">${I('play')} 저장됨 · ${DIFFS[saved[id].diff].name} ${saved[id].wave}웨이브</span>` : ''}</div>
+</div>
         ${ok ? '' : `<div class="lockv">${I('lock')}<b>${m.name}</b>${MAPS[m.unlock].name}에서<br>10웨이브를 넘기면 열려요</div>`}
       </button>`;
     }).join('')}</div>
@@ -1540,9 +1769,7 @@
     mball('canvas[data-prev]').forEach(cv => drawMapPreview(cv, cv.dataset.prev));
     mball('[data-map]').forEach(b => b.onclick = () => {
       if (b.disabled) return;
-      const id = b.dataset.map;
-      if (saved[id]) openSlotChoice(saved[id], diff);
-      else startNew(diff, id);
+      startNew(diff, b.dataset.map);
     });
   }
   function startNew(diff, map) {
@@ -1557,36 +1784,87 @@
     loadGame(sv, false);
     showBanner(`${I('play')} ${MAPD().name} · 웨이브 ${S.wave}부터 이어하기`, 'good', 1800);
   }
+  // ---------- 점수 보내기 · 랭킹 ----------
+  const fmt = n => Number(n || 0).toLocaleString('ko-KR');
+  function submitScore() {
+    Account.pushProfile();
+    if (!S.ranked || !S.runId || !Account.account) return;
+    const payload = { runId: S.runId, diff: S.lowest, map: S.map, wave: S.wave, score: S.score || 0, cleared: !!S.cleared };
+    Account.submitScore(payload).then(r => {
+      const el = $('rankNote');
+      if (!r || !r.ok) { if (el) el.textContent = r && r.error ? r.error : '랭킹 서버에 연결하지 못했어요. 다음 웨이브에 다시 보내요.'; return; }
+      if (el) el.innerHTML = r.newBest
+        ? `${I('crown')} ${DIFFS[payload.diff].name} 랭킹 <b>${fmt(r.rank)}위</b>! 내 최고 기록이에요`
+        : `${DIFFS[payload.diff].name} 내 최고 ${fmt(r.best)}점 · <b>${fmt(r.rank)}위</b>`;
+    });
+  }
+  function openRanking(diff, scope) {
+    diff = DIFFS[diff] ? diff : (DIFFS[S.lowest] ? S.lowest : 'normal');
+    scope = scope || 'all';
+    const ac = Account.account;
+    hide('title');
+    const head = `<div class="rank-tabs">${Object.keys(DIFFS).map(k => `<button data-rd="${k}" class="${k === diff ? 'on' : ''}">${DIFFS[k].name}</button>`).join('')}</div>
+      <div class="rank-scope"><button data-rs="all" class="${scope === 'all' ? 'on' : ''}">전체</button><button data-rs="school" class="${scope === 'school' ? 'on' : ''}" ${ac ? '' : 'disabled'}>우리 학교</button></div>`;
+    openModal(`${I('crown')} 랭킹`, `${head}<div id="rankBody"><p class="rank-empty">불러오는 중…</p></div>
+      <p class="stat-line" style="margin-top:8px;font-size:12.5px;color:#6b7a88">난이도마다 한 판 최고 점수로 순위를 매겨요. 맵마다 점수 배수가 달라 어느 맵에서 해도 공평해요.</p>`);
+    mball('[data-rd]').forEach(b => b.onclick = () => openRanking(b.dataset.rd, scope));
+    mball('[data-rs]').forEach(b => b.onclick = () => { if (!b.disabled) openRanking(diff, b.dataset.rs); });
+    if (!Account.hasServer) { $('rankBody').innerHTML = '<p class="rank-empty">랭킹은 인터넷 주소로 접속했을 때만 볼 수 있어요.</p>'; return; }
+    Account.getRank(diff, scope === 'school' && ac ? ac.school : '').then(r => {
+      const body = $('rankBody');
+      if (!body) return;
+      if (!r || !r.ok) { body.innerHTML = `<p class="rank-empty">${(r && r.error) || '랭킹을 불러오지 못했어요.'}</p>`; return; }
+      const row = (x, me) => `<div class="rank-row ${me ? 'me' : ''}">
+          <div class="rk ${x.rank <= 3 ? 'm' + x.rank : ''}">${x.rank}</div>
+          <div class="who"><b>${esc(x.nick)}</b><small>${esc(Account.shortSchool(x.schoolName))} · ${esc(x.sido || '')}</small></div>
+          <div class="pts"><b>${fmt(x.score)}점</b><small>${MAPS[x.map] ? I(MAPS[x.map].icon) : ''} ${fmt(x.wave)}웨이브</small></div></div>`;
+      const rows = r.rows || [];
+      let html = rows.length ? `<div class="rank-list">${rows.map(x => row(x, ac && x.accountId === ac.id)).join('')}</div>` : `<p class="rank-empty">아직 ${DIFFS[diff].name} 기록이 없어요. 첫 번째 주인공이 되어 보세요!</p>`;
+      if (r.me && !rows.some(x => ac && x.accountId === ac.id)) html += `<p class="rank-me-sep">⋯</p><div class="rank-list">${row(r.me, true)}</div>`;
+      else if (ac && !r.me) html += `<p class="rank-empty">아직 이 난이도의 내 기록이 없어요.</p>`;
+      body.innerHTML = html;
+    });
+  }
+
   function saveLine(sv) {
     const d = DIFFS[sv.diff] || DIFFS.normal;
-    return `${d.name} · 웨이브 ${sv.wave}${sv.cleared ? ' (무한 모드)' : ''} · 탑 ${(sv.towers || []).length}개`;
+    return `${d.name} · 웨이브 ${sv.wave}${sv.cleared ? ' (무한 모드)' : ''} · ${sv.ranked ? `${fmt(sv.score)}점` : '랭킹 제외(예전 저장)'}`;
   }
-  // 저장이 있는 맵을 고르면: 이어하기 / 처음부터
-  function openSlotChoice(sv, diff) {
-    const m = MAPS[sv.map];
-    openModal(`${I(m.icon)} ${m.name}`, `<div class="opt-list">
-      <button class="opt evolve" data-slot="cont"><span class="icon">${I('play')}</span>
-        <span class="info"><b>이어하기</b><small>${saveLine(sv)}</small></span></button>
-      <button class="opt" data-slot="new"><span class="icon">${I(DIFFS[diff].icon)}</span>
-        <span class="info"><b>처음부터 (${DIFFS[diff].name})</b><small>이 맵의 저장만 지워져요. 다른 맵 저장은 그대로예요.</small></span></button>
-    </div>`);
-    mb('[data-slot=cont]').onclick = () => continueSave(sv);
-    mb('[data-slot=new]').onclick = () => {
-      if (!confirm(`${m.name}의 저장(웨이브 ${sv.wave})이 지워져요. 처음부터 할까요?`)) return;
-      startNew(diff, sv.map);
-    };
+  function savedAtText(t) {
+    if (!t) return '';
+    const d = new Date(t), now = new Date();
+    const hm = d.toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' });
+    if (d.toDateString() === now.toDateString()) return `오늘 ${hm}`;
+    const y = new Date(now); y.setDate(now.getDate() - 1);
+    if (d.toDateString() === y.toDateString()) return `어제 ${hm}`;
+    return `${d.getMonth() + 1}월 ${d.getDate()}일 ${hm}`;
   }
-  // 처음 화면 '이어하기': 저장이 여러 맵이면 고르기
+  // 저장 목록: 게임 한 판마다 하나, 최근 순. 다른 기기에서 한 것도 서버에서 불러옴
   function openContinue() {
-    const saves = allSaves();
-    if (!saves.length) return;
-    if (saves.length === 1) { continueSave(saves[0]); return; }
     hide('title');
-    openModal(`${I('play')} 이어하기`, `<div class="opt-list">${saves.map(sv => `
-      <button class="opt" data-cont="${sv.map}"><span class="icon">${I(MAPS[sv.map].icon)}</span>
-        <span class="info"><b>${MAPS[sv.map].name}</b><small>${saveLine(sv)}</small></span></button>`).join('')}</div>
-      <p class="stat-line" style="margin-top:10px;font-size:13px;color:#6b7a88">맵마다 따로 저장돼요. 새 맵을 시작해도 다른 맵 저장은 지워지지 않아요.</p>`);
-    mball('[data-cont]').forEach(b => b.onclick = () => continueSave(loadSave(b.dataset.cont)));
+    const render = (note) => {
+      const saves = allSaves();
+      const rows = saves.map(sv => `
+        <div class="save-row" data-id="${sv.id}">
+          <div class="sv-ic">${I(MAPS[sv.map].icon)}</div>
+          <div class="sv-main"><b>${MAPS[sv.map].name}</b><small>${saveLine(sv)}</small><small class="sv-time">${I('scroll')} ${savedAtText(sv.savedAt)}</small></div>
+          <div class="sv-btns"><button class="sv-go" data-go="${sv.id}">이어하기</button><button class="sv-del" data-del="${sv.id}">지우기</button></div>
+        </div>`).join('');
+      const html = `${note ? `<p class="save-sync">${note}</p>` : ''}
+        ${saves.length ? `<div class="save-list">${rows}</div>` : `<p class="save-empty">아직 저장된 게임이 없어요. <b>새 게임</b>을 시작하면 웨이브마다 자동으로 저장돼요.</p>`}
+        <p class="stat-line" style="margin-top:10px;font-size:13px;color:#6b7a88">게임 한 판마다 따로 저장돼요 (최대 20개).${Account.account ? ' 다른 기기에서도 같은 계정으로 로그인하면 이어할 수 있어요.' : ''}</p>`;
+      if (modalOpen && $('modalTitle').dataset.kind === 'saves') $('modalBody').innerHTML = html;
+      else { openModal(`${I('play')} 저장된 게임`, html); $('modalTitle').dataset.kind = 'saves'; }
+      mball('[data-go]').forEach(b => b.onclick = () => { const sv = loadSave(b.dataset.go); if (sv) continueSave(sv); });
+      mball('[data-del]').forEach(b => b.onclick = () => {
+        if (!b.classList.contains('confirm')) { b.classList.add('confirm'); b.textContent = '정말 지울까요?'; return; }
+        Account.deleteRun(b.dataset.del);
+        render('');
+        refreshTitle();
+      });
+    };
+    render(Account.account ? '다른 기기의 저장을 확인하는 중…' : '');
+    if (Account.account) Account.sync().then(r => { if (modalOpen && $('modalTitle').dataset.kind === 'saves') render(r && r.offline ? '서버에 연결하지 못해 이 기기의 저장만 보여요.' : ''); refreshTitle(); });
   }
 
   // 게임 중 난이도 바꾸기 (일시정지 메뉴)
@@ -1633,10 +1911,15 @@
           <img src="${World.portraitOf('tower', t, { lvl: l, dark: !seen })}" alt=""><b>${seen ? L.name : '???'}</b><small>Lv.${l}</small></button>`;
       })).join('');
     } else {
-      grid = `<button class="dexc" data-dex="hero"><img src="${World.portraitOf('hero', 'hero')}" alt=""><b>${HERO.name}</b><small>필살기 ${P.ults}회</small></button>`;
+      grid = HERO_ORDER.map(id => {
+        const ok = Profile.heroUnlocked(id), H = HEROES[id];
+        return `<button class="dexc ${ok ? '' : 'lock'}" data-dex="hero:${id}">
+          ${Profile.hero() === id ? '<span class="badge">함께하는 중</span>' : ''}
+          <img src="${World.portraitOf('hero', id, { dark: !ok })}" alt=""><b>${ok ? H.name : '???'}</b><small>${ok ? H.weapon : `${MAPS[H.map].name} 열면`}</small></button>`;
+      }).join('');
     }
-    const total = DEX_ENEMIES.length + 9 + 1;
-    const found = DEX_ENEMIES.filter(t => P.seen[t]).length + Object.keys(P.towerForms).length + (P.seen.hero ? 1 : 0);
+    const total = DEX_ENEMIES.length + 9 + HERO_ORDER.length;
+    const found = DEX_ENEMIES.filter(t => P.seen[t]).length + Object.keys(P.towerForms).length + HERO_ORDER.filter(id => Profile.heroUnlocked(id)).length;
     const html = `
       <div class="tabs">${[['enemy', '몬스터'], ['tower', '탑'], ['hero', '영웅']].map(([k, n]) => `<button data-tab="${k}" class="${k === tab ? 'on' : ''}">${n}</button>`).join('')}</div>
       <p class="stat-line" style="font-size:13px;color:#6b7a88">수집 ${found} / ${total}</p>
@@ -1675,13 +1958,15 @@
           ${L.special ? `<span>특수 능력</span><b>${L.special}</b>` : ''}
         </div>` : ''}</div>`;
     } else {
-      html += `<img src="${World.portraitOf('hero', 'hero')}" alt="">
-        <div><h3>${HERO.name}</h3><p>${HERO.lore}</p><div class="dex-stats">
-          <span>기본 공격</span><b>불화살 장궁 (피해 ${HERO.dmg})</b>
-          <span>필살기</span><b>용사의 심판 — 모든 적에게 황금 검을 내리꽂고 잠시 기절시켜요</b>
-          <span>게이지</span><b>정답 1개에 12%씩 충전</b>
-          <span>필살기 사용</span><b>${P.ults}회</b>
-        </div></div>`;
+      const hid = HEROES[id] ? id : 'arin', H = HEROES[hid], ok = Profile.heroUnlocked(hid);
+      html += `<img src="${World.portraitOf('hero', hid, { dark: !ok })}" alt="">
+        <div><h3>${ok ? H.name : '???'}</h3><p>${ok ? H.lore : `${MAPS[H.map].name} 맵이 열리면 함께할 수 있어요.`}</p>${ok ? `<div class="dex-stats">
+          <span>무기</span><b>${H.weapon} (피해 ${HERO.dmg})</b>
+          <span>정답 공격</span><b>${H.tiers.join(' → ')}</b>
+          <span>필살기</span><b>${H.ult} — 모든 적을 멈추고, 쓰러뜨리거나 크게 지치게 해요</b>
+          <span>게이지</span><b>정답 20개쯤이면 가득</b>
+          <span>필살기 사용</span><b>${P.ults}회 (모든 영웅 합계)</b>
+        </div>` : ''}</div>`;
     }
     html += '</div>';
     openModal(`${I('book')} 도감`, html);
@@ -1710,12 +1995,13 @@
       <ul><li>길을 따라 몰려오는 적들로부터 성을 지키세요. 30웨이브의 최종 보스 <b>마왕</b>을 쓰러뜨리면 클리어!</li></ul>
       <h3>${I('shield')} 가장 중요한 규칙</h3>
       <ul><li>적은 모두 <b>구구단 방패</b>를 들고 있어요. 탑·스킬은 적을 <b>지치게(느리게)</b> 만들 뿐, 마지막 한 방은 <b>구구단 정답</b>으로만 쓰러뜨릴 수 있어요!</li>
-      <li>지친 적에는 주황색 <b>막타!</b> 표시가 떠요. 이때 맞히면 골드 1.5배!</li>
+      <li>지친 적에는 주황색 <b>막타!</b> 표시가 떠요. <b>골드는 막타로 적을 쓰러뜨릴 때만</b> 얻어요(1.5배). 방패만 깨거나 큰 적의 중간 정답은 골드가 없어요. (쉬움은 쓰러뜨리면 언제나 골드)</li>
       <li><b>보통·어려움·매우 어려움</b>: 아직 지치지 않은 적에게 정답을 맞히면 <b>방패만 깨지고</b> 새 문제가 나와요. 한 번 더 맞혀야 쓰러져요. 탑으로 적을 지치게 만들어 두면 정답 한 번에 끝!</li></ul>
       <h3>${I('hero')} 구구단 + 영웅</h3>
-      <ul><li>적 머리 위 문제(예: <b>7 × 8</b>)의 답을 입력하면 영웅이 <b>불화살</b>을 쏴서 적을 쓰러뜨리고 <b>골드</b>를 얻어요.</li>
-      <li>콤보 1~4 불화살 → 5~9 <b>3연발</b> → 10부터 <b>불사조 화살</b>! 연속으로 맞힐수록 공격이 화려해져요.</li>
-      <li>정답을 맞힐수록 영웅 게이지가 차요. 가득 차면 오른쪽 아래 버튼(또는 Q키)으로 필살기 <b>용사의 심판</b>!</li>
+      <ul><li>적 머리 위 문제(예: <b>7 × 8</b>)의 답을 입력하면 영웅이 공격해서 적을 쓰러뜨리고 <b>골드</b>와 <b>점수</b>를 얻어요.</li>
+      <li>콤보 1~4 한 발 → 5~9 <b>3연발</b> → 10부터 <b>불사조·독수리·용</b>! 연속으로 맞힐수록 공격이 화려해져요.</li>
+      <li>정답을 맞힐수록 영웅 게이지가 차요. 가득 차면 오른쪽 아래 버튼(또는 Q키)으로 <b>필살기</b>!</li>
+      <li>영웅은 4명: <b>아린</b>(불화살), <b>솔</b>(빛의 창, 사막 맵을 열면), <b>서리</b>(얼음 수정, 설원 맵을 열면), <b>라이</b>(번개 표창, 화산 맵을 열면). 처음 화면의 <b>영웅</b>에서 골라요. 모습과 연출만 다르고 힘은 같아요.</li>
       <li>같은 답의 적이 여럿이면 성에 가장 가까운 적(노란 말풍선)부터 맞아요. 큰 적은 여러 번 맞혀야 해요(● 개수).</li></ul>
       <h3>${I('bow')} 탑 · 레벨업 · 진화</h3>
       <ul><li>빈 칸(+)을 눌러 궁수탑 · 대포 · 서리 마법탑을 세워요. 세운 탑을 누르면 레벨업할 수 있어요.</li>
@@ -1888,10 +2174,12 @@
   $('btnContinue').onclick = () => { Sound.init(); autoFull(); openContinue(); };
   $('btnHelp').onclick = openHelp;
   $('btnShare').onclick = openShare;
+  $('btnRank').onclick = () => { Sound.init(); openRanking(); };
+  $('btnHero').onclick = () => openHeroes();
   $('btnBook').onclick = () => openBook();
   $('btnAch').onclick = openAchievements;
   $('btnRetry').onclick = () => {
-    const sv = loadSave(S.map);
+    const sv = loadSave(S.runId);
     beginPlay();
     if (sv) loadGame(sv, true); else newGame(S.diff, S.map);
   };
@@ -1934,17 +2222,26 @@
   // ================= 시작 =================
   try { if (lsGet(SOUND_KEY) === '1') Sound.setMuted(true); } catch (_) { /* 무시 */ }
   soundIcon();
-  const sv0 = loadSave();
+  if (!Account.hasServer) Account.migrateOldSaves(); // 파일로 연 경우(서버 없음): 로그인 없이 이 기기에만 저장
+  const sv0 = allSaves()[0];
   World.loadMap(sv0 && MAPS[sv0.map] ? sv0.map : 'forest');
   S.map = World.mapId;
   resize();
   World.setTitleCam(true);
+  Profile.useOwner(Account.owner);
   refreshTitle();
+  // 로그인해야만 플레이: 이 기기에 로그인 표시가 없으면 로그인 화면부터
+  if (Account.required && !Account.session) openLogin();
+  else if (Account.required) Account.verify().then(ok => { if (!ok) { Profile.useOwner('guest'); openLogin(); } else syncAll(); });
+  else titleNotices();
+  // 플레이 기록은 바뀐 것이 있을 때 가끔, 그리고 화면을 떠날 때 서버에 올림
+  setInterval(() => { if (S.mode !== 'wave') Account.pushProfile(); }, 30000);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) Account.pushProfile(); });
   updateControls();
   requestAnimationFrame(frame);
   if (window.ResizeObserver) new ResizeObserver(() => resize()).observe(wrap);
 
   // 디버그/테스트용
-  window.__game = { S, World, Profile, openDiffChange, startWave, newGame, submit, pressDigit, useSkill, useUlt, buildWave, openBuild, openTower, openCards, openBook, openAchievements, openMapSelect, waveClear, spawnEnemy, computeMods };
+  window.__game = { S, World, Profile, openDiffChange, startWave, newGame, submit, pressDigit, useSkill, useUlt, buildWave, openBuild, openTower, openCards, openBook, openAchievements, openMapSelect, waveClear, spawnEnemy, computeMods, forceSave: save, openHeroes, useHero, titleNotices };
   window.__gameReady = true; // index.html의 안전장치가 '게임이 잘 시작됨'을 알 수 있게
 })();
