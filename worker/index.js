@@ -5,6 +5,7 @@
 //   · 계정: 학교 + 닉네임 + 숫자 4자리 비밀번호 (10번 틀리면 10분 잠금)
 //   · 저장: 계정마다 최대 20개, 다른 기기에서도 불러오기
 //   · 랭킹: 난이도마다 한 판 최고 점수 (전체 / 우리 학교)
+//   · 플레이 기록: 열린 맵·영웅·업적·도감을 계정에 두어 다른 기기에서도 이어짐
 // - 모든 데이터는 Durable Object(SQLite) 하나에 저장. 무료 플랜에서 쓸 수 있는 방식이에요.
 // - 비밀번호는 그대로 저장하지 않고 PBKDF2로 해시해서 저장해요. 로그인 표시(토큰)도 해시로만 저장해요.
 import { DurableObject } from 'cloudflare:workers';
@@ -81,6 +82,21 @@ function sameText(a, b) {
   return d === 0;
 }
 
+// ---- 플레이 기록 합치기 (js/profile.js와 같은 규칙) ----
+// 숫자는 큰 쪽, 참/거짓은 하나라도 참, 묶음은 안쪽까지, 글자는 새로 온 것
+function mergeProfile(a, b, depth = 0) {
+  if (depth > 6) return a;
+  for (const k of Object.keys(b || {})) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+    const x = a[k], y = b[k];
+    if (y && typeof y === 'object' && !Array.isArray(y)) a[k] = mergeProfile(x && typeof x === 'object' && !Array.isArray(x) ? x : {}, y, depth + 1);
+    else if (typeof y === 'number') a[k] = Number.isFinite(y) ? (typeof x === 'number' ? Math.max(x, y) : y) : x;
+    else if (typeof y === 'boolean') a[k] = !!x || y;
+    else if (typeof y === 'string') a[k] = y.slice(0, 40);
+  }
+  return a;
+}
+
 // ---- 학교 목록 (data/schools.json) ----
 let schoolMap = null;
 async function loadSchools(env) {
@@ -126,6 +142,7 @@ export class Stats extends DurableObject {
       );
       CREATE INDEX IF NOT EXISTS best_rank ON best (diff, score DESC);
       CREATE INDEX IF NOT EXISTS best_school ON best (diff, school, score DESC);
+      CREATE TABLE IF NOT EXISTS profiles (account_id INTEGER PRIMARY KEY, data TEXT NOT NULL, updated INTEGER);
       CREATE TABLE IF NOT EXISTS ip_limits (ip TEXT NOT NULL, kind TEXT NOT NULL, win INTEGER NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (ip, kind, win));
     `);
     this.cache = null;
@@ -254,6 +271,21 @@ export class Stats extends DurableObject {
     return { status: 200, ok: true };
   }
 
+  // ---------- 플레이 기록 ----------
+  getProfile(accountId) {
+    const r = this.sql.exec('SELECT data FROM profiles WHERE account_id = ?', accountId).toArray()[0];
+    let data = null;
+    try { data = r ? JSON.parse(r.data) : null; } catch (e) { data = null; }
+    return { status: 200, data };
+  }
+  putProfile(accountId, data) {
+    const merged = mergeProfile(this.getProfile(accountId).data || {}, data);
+    const text = JSON.stringify(merged);
+    if (text.length > MAX_SAVE_BYTES) return { status: 413, error: '기록이 너무 커요.' };
+    this.sql.exec('INSERT INTO profiles (account_id, data, updated) VALUES (?, ?, ?) ON CONFLICT (account_id) DO UPDATE SET data = excluded.data, updated = excluded.updated', accountId, text, Date.now());
+    return { status: 200, ok: true };
+  }
+
   // ---------- 점수·랭킹 ----------
   // 웨이브를 넘길 때마다 들어오는 이번 판 점수. 말이 안 되는 점수·속도는 받지 않음
   submitScore(a, { runId, diff, map, wave, score }) {
@@ -330,6 +362,8 @@ export class Stats extends DurableObject {
     if (op === 'putSave') return this.putSave(a.id, body.id, body.data);
     if (op === 'deleteSave') return this.deleteSave(a.id, body.id);
     if (op === 'score') return this.submitScore(a, body);
+    if (op === 'getProfile') return this.getProfile(a.id);
+    if (op === 'putProfile') return this.putProfile(a.id, body.data);
     return { status: 404, error: 'not found' };
   }
 }
@@ -392,6 +426,15 @@ export default {
         return json({ error: '점수를 확인할 수 없어 기록하지 않았어요.', code: 'bad_score' }, 400);
       }
       return call(env, { op: 'score', token, body: { runId, diff, map, wave, score } });
+    }
+    if (p === '/api/profile') {
+      if (m === 'GET') return call(env, { op: 'getProfile', token });
+      if (m === 'PUT') {
+        const body = await readJson(request);
+        if (!body || !body.data || typeof body.data !== 'object' || Array.isArray(body.data)) return json({ error: '기록 내용이 올바르지 않아요.' }, 400);
+        if (JSON.stringify(body.data).length > MAX_SAVE_BYTES) return json({ error: '기록이 너무 커요.' }, 413);
+        return call(env, { op: 'putProfile', token, body: { data: body.data } });
+      }
     }
     if (p === '/api/rank' && m === 'GET') {
       const diff = url.searchParams.get('diff') || '';

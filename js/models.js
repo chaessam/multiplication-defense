@@ -554,7 +554,14 @@ const Models = (() => {
     troll:   { skin: '#86a7b6', armor: '#526156', legs: '#6c8a96', weapon: 'club', bulk: true, tusk: true, eye: '#ffef5a' },
     orcking: { skin: '#5aa046', armor: '#3b2b22', legs: '#3f7a30', helm: 'horn', weapon: 'axe', bulk: true, tusk: true, eye: '#f33', cape: '#b3261e' },
     demonking: { skin: '#8a2333', armor: '#2b2236', legs: '#1c1724', helm: 'demon', weapon: 'greatsword', bulk: true, eye: '#ff3b2f', cape: '#7a0f1f', spikes: true },
-    hero:    { skin: '#f2c39c', armor: '#3f6fd8', legs: '#2a4a9a', helm: 'hero', weapon: 'longbow', cape: '#e5483b', belt: '#f4c247', shield: null, hero: true },
+    hero:    { skin: '#f2c39c', armor: '#3f6fd8', legs: '#2a4a9a', helm: 'hero', weapon: 'longbow', cape: '#e5483b', belt: '#f4c247', shield: null, hero: true, backSword: true },
+    // ---- 해금 영웅 (사막·설원·화산) ----
+    sol:     { skin: '#e8b48a', armor: '#f6eedb', legs: '#c98a2a', helm: 'sun', weapon: 'lance', cape: '#fffaf0', capeTrim: '#f4c247', belt: '#b3261e', hero: true,
+               chest: 'gold', tabard: '#e5483b', gem: '#ffd23f', sunShield: true },
+    seori:   { skin: '#f6d2b4', armor: '#3f86c6', legs: '#2a5a9a', helm: 'wizard', weapon: 'staff', cape: '#bfe6ff', capeTrim: '#e6fbff', belt: '#e6fbff', hero: true,
+               chest: '#e6fbff', tabard: '#2a5a9a', gem: '#7fd8ff', robe: '#3f86c6', orbit: '#9fe6ff' },
+    rai:     { skin: '#f2c39c', armor: '#2a2440', legs: '#1f1a30', helm: 'ninja', weapon: 'shuriken', cape: null, belt: '#8a4ae0', hero: true,
+               chest: '#3a3456', tabard: '#8a4ae0', gem: '#fff59a', scarf: '#8a4ae0', backKatana: true },
     // ---- 사막 ----
     sandthief: { skin: '#c98b5a', armor: '#e9d8a6', legs: '#7a5a3a', helm: 'turban', weapon: 'scimitar', ears: true, eye: '#ffde3a', belt: '#b3261e', scarf: '#2f8f9a' },
     mummy:     { skin: '#e3d8b8', armor: '#d6c9a2', legs: '#cbbd94', helm: 'nemes', weapon: 'spear', tip: '#f4c247', eye: '#5fffd0', wraps: true, belt: '#f4c247' },
@@ -591,20 +598,26 @@ const Models = (() => {
     if (L.belt) body.add(part(G.cyl6, mat(L.belt), bulk ? 0.6 : 0.39, 0.1, bulk ? 0.6 : 0.39, 0, bulk ? 0.72 : 0.64, 0));
     const gold = mat('#f4c247', { metalness: 0.55, roughness: 0.3 });
     const silver = mat('#e8eef5', { metalness: 0.55, roughness: 0.3 });
+    const chestM = L.chest === 'gold' ? gold : L.chest ? mat(L.chest, { metalness: 0.3, roughness: 0.4 }) : silver;
     if (L.hero) {
-      // 영웅: 은빛 흉갑 + 금빛 문장 + 허리 망토 자락
-      body.add(part(G.cyl6, silver, 0.42, 0.34, 0.42, 0, 1.0, 0));
-      body.add(part(G.oct, gold, 0.07, 0.17, 0.15, 0.4, 1.0, 0));
-      body.add(part(G.oct, glow('#5fd3ff', 1.2), 0.04, 0.07, 0.06, 0.45, 1.0, 0));
-      body.add(part(G.box, mat('#2a4a9a'), 0.1, 0.32, 0.36, 0.3, 0.45, 0));
+      // 영웅: 흉갑 + 금빛 문장 + 허리 앞자락
+      body.add(part(G.cyl6, chestM, 0.42, 0.34, 0.42, 0, 1.0, 0));
+      body.add(part(G.oct, L.chest === 'gold' ? silver : gold, 0.07, 0.17, 0.15, 0.4, 1.0, 0));
+      body.add(part(G.oct, glow(L.gem || '#5fd3ff', 1.2), 0.04, 0.07, 0.06, 0.45, 1.0, 0));
+      body.add(part(G.box, mat(L.tabard || '#2a4a9a'), 0.1, 0.32, 0.36, 0.3, 0.45, 0));
       body.add(part(G.box, gold, 0.11, 0.05, 0.37, 0.31, 0.31, 0));
+    }
+    if (L.robe) {
+      // 마법사 긴 옷자락 (다리를 덮음) + 눈꽃 테두리
+      body.add(part(new T.CylinderGeometry(0.24, 0.42, 0.62, 8), mat(L.robe), 1, 1, 1, 0, 0.36, 0));
+      body.add(part(G.cyl8, mat('#e6fbff'), 0.43, 0.06, 0.43, 0, 0.07, 0));
     }
     if (L.cape) {
       const cp = new T.Group(); cp.position.set(bulk ? -0.58 : -0.36, bulk ? 1.5 : 1.28, 0); cp.rotation.z = -0.15; body.add(cp);
       const big = L.hero ? 1.25 : 1;
       cp.add(part(G.box, mat(L.cape), 0.07, 1.15 * big, 1.0 * big, -0.06, -0.55 * big, 0));
       if (L.hero) {
-        cp.add(part(G.box, gold, 0.08, 0.07, 1.27, -0.06, -1.35, 0));
+        cp.add(part(G.box, L.capeTrim ? mat(L.capeTrim, { metalness: 0.4, roughness: 0.35 }) : gold, 0.08, 0.07, 1.27, -0.06, -1.35, 0));
         cp.add(part(G.box, mat('#f6eedb'), 0.08, 0.3, 0.3, -0.08, -0.55, 0));
         cp.add(part(G.oct, gold, 0.06, 0.12, 0.12, -0.12, -0.55, 0));
       }
@@ -685,6 +698,41 @@ const Models = (() => {
         const h1 = part(G.cone6, mat('#2a2030'), 0.11, 0.55, 0.11, -0.05, headY + 0.32, sd * 0.3); h1.rotation.x = sd * -1.0; body.add(h1);
         const h2 = part(G.cone6, mat('#e8dcc0'), 0.07, 0.4, 0.07, -0.1, headY + 0.62, sd * 0.55); h2.rotation.x = sd * -0.2; h2.rotation.z = 0.4; body.add(h2);
       });
+    } else if (L.helm === 'sun') {
+      // 태양 기사: 갈색 머리 + 금빛 투구 + 뒤로 퍼지는 햇살 왕관 + 붉은 깃
+      body.add(part(G.halfSphere, mat('#6a3a1a'), 0.33, 0.3, 0.34, -0.04, headY + 0.03, 0));
+      body.add(part(G.halfSphere, gold, 0.34, 0.27, 0.35, 0.0, headY + 0.1, 0));
+      body.add(part(G.cyl8, silver, 0.35, 0.06, 0.36, 0.0, headY + 0.1, 0));
+      body.add(part(G.box, gold, 0.06, 0.24, 0.05, 0.33, headY + 0.0, 0));
+      body.add(part(G.oct, glow('#ffd23f', 1.4), 0.08, 0.12, 0.06, 0.34, headY + 0.17, 0));
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 6 - 0.5) * 2.4;
+        const ray = part(G.cone4, glow(i % 2 ? '#ffd23f' : '#fff3a0', 0.9), 0.06, i % 2 ? 0.34 : 0.48, 0.06, -0.12 + Math.cos(a) * -0.05, headY + 0.3 + Math.cos(a) * 0.18, Math.sin(a) * 0.3);
+        ray.rotation.x = -a * 0.55; ray.rotation.z = 0.35; body.add(ray);
+      }
+      body.add(part(G.box, mat('#e5483b'), 0.42, 0.14, 0.07, -0.18, headY + 0.36, 0));
+    } else if (L.helm === 'wizard') {
+      // 꼬마 마법사: 은빛 머리 + 넓은 챙 + 휘어진 뾰족 모자 + 눈꽃 별
+      body.add(part(G.halfSphere, mat('#eaf6ff'), 0.33, 0.3, 0.34, -0.04, headY + 0.02, 0));
+      body.add(part(G.box, mat('#eaf6ff'), 0.2, 0.3, 0.5, -0.2, headY - 0.12, 0));
+      body.add(part(G.cyl8, mat('#2a5a9a'), 0.56, 0.05, 0.56, 0, headY + 0.17, 0));
+      body.add(part(G.cyl8, mat('#e6fbff'), 0.36, 0.07, 0.36, 0, headY + 0.21, 0));
+      const hat = new T.Group(); hat.position.set(0, headY + 0.22, 0); body.add(hat);
+      hat.add(part(G.cone6, mat('#3f86c6'), 0.34, 0.6, 0.34, 0, 0.3, 0));
+      const tip = part(G.cone6, mat('#3f86c6'), 0.16, 0.36, 0.16, -0.12, 0.66, 0); tip.rotation.z = 0.7; hat.add(tip);
+      hat.add(part(G.oct, glow('#bff3ff', 1.5), 0.1, 0.1, 0.1, -0.3, 0.76, 0));
+      hat.add(part(G.oct, glow('#9fe6ff', 1.2), 0.07, 0.07, 0.07, 0.3, 0.22, 0));
+    } else if (L.helm === 'ninja') {
+      // 닌자: 검은 두건 + 얼굴 가리개 + 보라 머리띠(빛나는 문양) + 뒤로 날리는 띠
+      body.add(part(G.halfSphere, mat('#1c1830'), 0.34, 0.33, 0.35, -0.01, headY + 0.02, 0));
+      body.add(part(G.box, mat('#1c1830'), 0.22, 0.32, 0.56, -0.16, headY - 0.1, 0));
+      body.add(part(G.box, mat('#2a2440'), 0.1, 0.16, 0.42, 0.25, headY - 0.1, 0));
+      body.add(part(G.cyl8, mat('#8a4ae0'), 0.35, 0.08, 0.36, 0, headY + 0.13, 0));
+      body.add(part(G.box, silver, 0.05, 0.1, 0.18, 0.34, headY + 0.13, 0));
+      body.add(part(G.box, glow('#fff59a', 1.4), 0.03, 0.05, 0.1, 0.37, headY + 0.13, 0));
+      const tails = new T.Group(); tails.position.set(-0.32, headY + 0.13, 0); body.add(tails);
+      [-1, 1].forEach(sd => { const t = part(G.box, mat('#8a4ae0'), 0.5, 0.06, 0.1, -0.25, -0.05, sd * 0.06); t.rotation.z = 0.25 + sd * 0.08; tails.add(t); });
+      g.userData.tails = tails;
     } else if (L.helm === 'hero') {
       // 영웅: 금빛 머리카락 + 날개 달린 은빛 투구 + 푸른 보석
       body.add(part(G.halfSphere, mat('#f4c247'), 0.33, 0.32, 0.34, -0.03, headY + 0.03, 0));
@@ -757,6 +805,32 @@ const Models = (() => {
       nock.add(part(G.box, mat('#e5483b'), 0.01, 0.14, 0.1, 0, 0.1, 0));
       hand.add(bw);
       g.userData.bow = bw; g.userData.nock = nock;
+    } else if (L.weapon === 'lance') {
+      // 황금 빛의 창: 팔을 뻗으면 앞을 향함, 창끝에 햇빛이 모임
+      const ln = new T.Group(); hand.add(ln);
+      ln.add(part(G.cyl6, gold, 0.045, 2.3, 0.045, 0, -0.45, 0));
+      ln.add(part(G.cyl8, mat('#b3261e'), 0.07, 0.12, 0.07, 0, 0.0, 0));
+      ln.add(part(G.cone6, mat('#fff8e0', { emissive: '#ffd23f', emissiveIntensity: 0.8, metalness: 0.4, roughness: 0.2 }), 0.11, 0.5, 0.11, 0, -1.85, 0).rotateZ(Math.PI));
+      ln.add(part(G.box, gold, 0.06, 0.06, 0.32, 0, -1.55, 0));
+      const pen = part(G.box, mat('#e5483b', { side: T.DoubleSide }), 0.02, 0.26, 0.24, 0, -1.4, 0.14); ln.add(pen);
+      const tip = new T.Object3D(); tip.position.set(0, -2.05, 0); ln.add(tip);
+      g.userData.muzzle = tip;
+    } else if (L.weapon === 'staff') {
+      // 얼음 수정 지팡이: 지팡이를 세워 들고, 꼭대기 수정이 빛남
+      const st = new T.Group(); hand.add(st);
+      st.add(part(G.box, mat('#e6eef5', { metalness: 0.3, roughness: 0.35 }), 1.6, 0.06, 0.06, 0.3, 0, 0));
+      st.add(part(G.box, mat('#3f86c6'), 0.12, 0.09, 0.09, 0.0, 0, 0));
+      [-1, 1].forEach(sd => { const pr = part(G.cone4, mat('#e6eef5', { metalness: 0.3 }), 0.04, 0.3, 0.04, 1.02, sd * 0.08, 0); pr.rotation.z = -Math.PI / 2 + sd * 0.5; st.add(pr); });
+      const cr = part(G.oct, mat('#e6fbff', { emissive: '#7fd8ff', emissiveIntensity: 1.0, roughness: 0.1 }), 0.16, 0.3, 0.16, 1.28, 0, 0); cr.rotation.z = Math.PI / 2; st.add(cr);
+      const tip = new T.Object3D(); tip.position.set(1.3, 0, 0); st.add(tip);
+      g.userData.muzzle = tip; g.userData.crystal = cr;
+    } else if (L.weapon === 'shuriken') {
+      // 번개 표창: 손에 든 네 날 표창이 빙글빙글 돌며 번개를 두름
+      const sh = new T.Group(); sh.position.set(0, -0.16, 0); hand.add(sh);
+      const blade = mat('#d8dde4', { metalness: 0.7, roughness: 0.25 });
+      for (let i = 0; i < 4; i++) { const b = part(G.cone4, blade, 0.1, 0.34, 0.03, 0, 0, 0); b.position.set(Math.cos(i * Math.PI / 2) * 0.17, Math.sin(i * Math.PI / 2) * 0.17, 0); b.rotation.z = i * Math.PI / 2 - Math.PI / 2; sh.add(b); }
+      sh.add(part(G.cyl8, glow('#c27bff', 1.4), 0.09, 0.05, 0.09, 0, 0, 0).rotateX(Math.PI / 2));
+      g.userData.muzzle = sh; g.userData.spinner = sh;
     } else if (L.weapon === 'crossbow') {
       // 황금 석궁 (앞으로 겨눔)
       const cb = new T.Group();
@@ -775,9 +849,9 @@ const Models = (() => {
       });
     }
     if (L.hero) {
-      // 겹친 어깨 갑옷 + 등에 멘 대검
+      // 겹친 어깨 갑옷 + 등에 멘 무기
       [-1, 1].forEach(sd => {
-        body.add(part(G.halfSphere, silver, 0.22, 0.17, 0.22, 0, shoulderY + 0.02, sd * sz));
+        body.add(part(G.halfSphere, L.chest === 'gold' ? gold : L.chest ? chestM : silver, 0.22, 0.17, 0.22, 0, shoulderY + 0.02, sd * sz));
         body.add(part(G.cyl8, gold, 0.225, 0.04, 0.225, 0, shoulderY + 0.02, sd * sz));
         body.add(part(G.cone4, gold, 0.04, 0.16, 0.04, -0.02, shoulderY + 0.22, sd * (sz + 0.02)));
       });
@@ -788,11 +862,36 @@ const Models = (() => {
         qv.add(part(G.cyl8, gold, 0.125, 0.05, 0.125, 0, 0.3, 0));
         [-0.05, 0.03, 0.06].forEach((z, i) => qv.add(part(G.box, mat(i % 2 ? '#ffb030' : '#e5483b'), 0.04, 0.2, 0.08, (i - 1) * 0.05, 0.45, z)));
       }
-      const sw = new T.Group(); sw.position.set(-0.32, 1.15, L.weapon === 'longbow' ? 0.12 : 0); sw.rotation.x = 0.6; body.add(sw);
-      sw.add(part(G.box, mat('#cfe7ff', { emissive: '#5fd3ff', emissiveIntensity: 0.35, metalness: 0.5, roughness: 0.25 }), 0.05, 1.05, 0.12, 0, 0.1, 0));
-      sw.add(part(G.box, gold, 0.07, 0.07, 0.36, 0, -0.45, 0));
-      sw.add(part(G.box, mat('#5a3a22'), 0.06, 0.22, 0.06, 0, -0.6, 0));
-      sw.add(part(G.oct, glow('#5fd3ff', 1.2), 0.06, 0.06, 0.06, 0, -0.73, 0));
+      if (L.backSword) {
+        const sw = new T.Group(); sw.position.set(-0.32, 1.15, L.weapon === 'longbow' ? 0.12 : 0); sw.rotation.x = 0.6; body.add(sw);
+        sw.add(part(G.box, mat('#cfe7ff', { emissive: '#5fd3ff', emissiveIntensity: 0.35, metalness: 0.5, roughness: 0.25 }), 0.05, 1.05, 0.12, 0, 0.1, 0));
+        sw.add(part(G.box, gold, 0.07, 0.07, 0.36, 0, -0.45, 0));
+        sw.add(part(G.box, mat('#5a3a22'), 0.06, 0.22, 0.06, 0, -0.6, 0));
+        sw.add(part(G.oct, glow('#5fd3ff', 1.2), 0.06, 0.06, 0.06, 0, -0.73, 0));
+      }
+      if (L.backKatana) {
+        // 등에 멘 칼집 + 보랏빛 칼날 손잡이
+        const kt = new T.Group(); kt.position.set(-0.3, 1.1, 0); kt.rotation.x = -0.7; body.add(kt);
+        kt.add(part(G.box, mat('#1c1830'), 0.07, 1.1, 0.1, 0, 0, 0));
+        kt.add(part(G.box, mat('#8a4ae0'), 0.08, 0.05, 0.11, 0, -0.3, 0));
+        kt.add(part(G.box, silver, 0.06, 0.05, 0.26, 0, 0.56, 0));
+        kt.add(part(G.box, mat('#3a2c5a'), 0.06, 0.3, 0.06, 0, 0.73, 0));
+        kt.add(part(G.oct, glow('#c27bff', 1.3), 0.06, 0.06, 0.06, 0, 0.9, 0));
+      }
+      if (L.orbit) {
+        // 몸 둘레를 도는 작은 얼음 수정 3개
+        const ob = new T.Group(); ob.position.y = 1.0; body.add(ob);
+        for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2; ob.add(part(G.oct, mat('#e6fbff', { emissive: L.orbit, emissiveIntensity: 1.0, roughness: 0.1 }), 0.08, 0.16, 0.08, Math.cos(a) * 0.75, Math.sin(i * 2) * 0.15, Math.sin(a) * 0.75)); }
+        g.userData.orbit = ob;
+      }
+    }
+    if (L.sunShield) {
+      // 태양 문장 방패
+      const sg = new T.Group(); sg.position.set(0.1, -0.32, -0.14); sg.rotation.x = Math.PI / 2; armL.add(sg);
+      sg.add(part(G.cyl8, gold, 0.34, 0.07, 0.34, 0, 0, 0));
+      sg.add(part(G.cyl8, mat('#fffaf0'), 0.27, 0.08, 0.27, 0, 0, 0));
+      sg.add(part(G.cyl8, glow('#ffb030', 1.1), 0.12, 0.09, 0.12, 0, 0, 0));
+      for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; sg.add(part(G.box, gold, 0.035, 0.09, 0.09, Math.cos(a) * 0.19, 0, Math.sin(a) * 0.19)); }
     }
     if (L.shield) {
       const sh = part(G.cyl8, mat(L.shield), 0.3, 0.07, 0.3, 0.1, -0.3, -0.1);
@@ -900,7 +999,7 @@ const Models = (() => {
     g.traverse(o => { if (o.isMesh) o.castShadow = true; });
     return g;
   }
-  function buildHero() { return shadowAll(buildHumanoid(LOOKS.hero)); }
+  function buildHero(id) { return shadowAll(buildHumanoid(LOOKS[id && id !== 'arin' ? id : 'hero'] || LOOKS.hero)); }
 
   return { mat, glow, mesh, part, G, torch, buildCastle, buildTower, buildEnemy, buildHero, LOOKS };
 })();

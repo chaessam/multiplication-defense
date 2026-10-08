@@ -93,6 +93,32 @@ const GD = (() => {
     lore: '왕국을 지키는 젊은 용사. 장궁에 구구단의 힘을 불어넣어 불화살을 쏴요. 연속으로 맞히면 3연발, 불사조 화살까지! 정답을 맞힐수록 힘이 모여 필살기 "용사의 심판"을 쓸 수 있어요.',
   };
 
+  // ---------------- 영웅 4명 (능력치는 모두 같고 모습·공격 연출만 달라요) ----------------
+  // map: 그 맵이 열리면 영웅도 함께 열림. tiers: 콤보 1~4 / 5~9 / 10~ 공격 이름
+  const HEROES = {
+    arin: {
+      name: '용사 아린', short: '아린', color: '#e5483b', icon: 'firearrow', ult: '용사의 심판', weapon: '불화살 장궁',
+      tiers: ['불화살', '불화살 3연발', '불사조 화살'],
+      lore: '왕국을 지키는 젊은 용사. 장궁에 구구단의 힘을 불어넣어 불화살을 쏴요. 연속으로 맞히면 3연발, 불사조 화살까지! 필살기 "용사의 심판"은 불사조가 길을 휩쓸고 불화살 비를 내려요.',
+    },
+    sol: {
+      name: '태양 기사 솔', short: '솔', color: '#f0a020', icon: 'sun', ult: '태양의 창', weapon: '황금 빛의 창', map: 'desert',
+      tiers: ['빛의 창', '빛의 창 3연발', '황금 독수리'],
+      lore: '사막의 태양 신전을 지키던 기사. 황금 창에 햇빛을 모아 빛의 창을 던져요. 콤보가 쌓이면 황금 독수리가 날아올라요. 필살기 "태양의 창"은 하늘에서 빛의 창을 쏟아부어요.',
+    },
+    seori: {
+      name: '서리 마법사 서리', short: '서리', color: '#3f86c6', icon: 'snow', ult: '눈보라 용', weapon: '얼음 수정 지팡이', map: 'snow',
+      tiers: ['얼음 수정', '얼음 수정 3연발', '서리 용'],
+      lore: '눈 덮인 봉우리에서 온 꼬마 마법사. 지팡이로 날카로운 얼음 수정을 날려요. 콤보가 쌓이면 서리 용을 불러내요. 필살기 "눈보라 용"은 거대한 얼음 용이 길을 얼려 버려요.',
+    },
+    rai: {
+      name: '번개 닌자 라이', short: '라이', color: '#8a4ae0', icon: 'bolt', ult: '천둥 폭풍', weapon: '번개 표창', map: 'volcano',
+      tiers: ['번개 표창', '번개 표창 3연발', '천둥 용'],
+      lore: '화산 너머 구름 위 마을의 닌자. 번개를 두른 표창을 순식간에 던져요. 콤보가 쌓이면 천둥 용이 날아가요. 필살기 "천둥 폭풍"은 하늘에서 번개가 쏟아져 내려요.',
+    },
+  };
+  const HERO_ORDER = ['arin', 'sol', 'seori', 'rai'];
+
   // ---------------- 난이도 ----------------
   const DIFFS = {
     easy: {
@@ -271,5 +297,5 @@ const GD = (() => {
   };
 
   Object.entries(VARIANTS).forEach(([m, v]) => { MAPS[m].enemies = Object.fromEntries(ROLES.map(r => [r, v[r][0]])); });
-  return { SCORE, TOWERS, LV_DMG, LV_RATE, LV_RANGE, ENEMIES, ROLES, VARIANTS, DEX_ENEMIES, BOSS_ORDER, FINAL_WAVE, HERO, DIFFS, MAPS, MAP_ORDER, CARDS, RARITY, ACH, TIERS, UPGRADES };
+  return { SCORE, TOWERS, LV_DMG, LV_RATE, LV_RANGE, ENEMIES, ROLES, VARIANTS, DEX_ENEMIES, BOSS_ORDER, FINAL_WAVE, HERO, HEROES, HERO_ORDER, DIFFS, MAPS, MAP_ORDER, CARDS, RARITY, ACH, TIERS, UPGRADES };
 })();

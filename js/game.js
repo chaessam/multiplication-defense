@@ -5,7 +5,7 @@
   'use strict';
   Icons.mount();
   const I = Icons.html;
-  const { SCORE, TOWERS, LV_DMG, LV_RATE, LV_RANGE, ENEMIES, ROLES, DEX_ENEMIES, BOSS_ORDER, FINAL_WAVE, HERO, DIFFS, MAPS, MAP_ORDER, CARDS, RARITY, ACH, TIERS, UPGRADES } = GD;
+  const { SCORE, TOWERS, LV_DMG, LV_RATE, LV_RANGE, ENEMIES, ROLES, DEX_ENEMIES, BOSS_ORDER, FINAL_WAVE, HERO, HEROES, HERO_ORDER, DIFFS, MAPS, MAP_ORDER, CARDS, RARITY, ACH, TIERS, UPGRADES } = GD;
 
   const SOUND_KEY = 'gugudan-defense-muted';
   const CROSS_TIME = 24;          // 첫 맵 기준, 1웨이브 병사가 길 끝까지 가는 시간(초)
@@ -426,6 +426,11 @@
   function knock(e, units, force) { if (e.exhausted && !force) return; e.t = Math.max(0, e.t - units / World.pathLength); }
 
   // ================= 영웅 =================
+  function heroSfx(kind, tier) {
+    const id = World.heroId;
+    if (id === 'arin') Sound.play(kind === 'heroShot' ? 'fireShot' : 'fireHit', tier);
+    else Sound.play(kind, id, tier);
+  }
   function heroDmg() { return HERO.dmg * (1 + 0.3 * S.up.hero) * (1 + MOD.heroDmg) * (1 + 0.1 * (S.wave - 1)); }
   function updateHero(dt) {
     S.heroCd -= dt;
@@ -453,27 +458,39 @@
     Profile.ult();
     World.heroUlt();
     Sound.play('ult');
-    showBanner(`${I('firearrow')} 용사의 심판!`, 'good', 1600);
-    // 하늘이 붉게 어두워지고, 모든 적이 겁에 질려 멈춤
+    const H = HEROES[World.heroId], fxc = World.heroFx();
+    showBanner(`${I(H.icon)} ${H.ult}!`, 'good', 1600);
+    // 하늘이 영웅의 색으로 어두워지고, 모든 적이 겁에 질려 멈춤
     const dim = $('ultDim');
+    dim.style.background = `radial-gradient(ellipse at 50% 40%, ${fxc.dim})`;
     dim.classList.remove('on'); void dim.offsetWidth; dim.classList.add('on');
     S.shake = Math.max(S.shake, 6);
     const hs = World.heroSpot;
-    World.pillar(hs.x, hs.z, '#ff7a1a', 12);
+    World.pillar(hs.x, hs.z, fxc.ring, 12);
     World.fireBurst(hs.x, 1.2, hs.z, 50, 9, 0.55);
-    World.ring(hs.x, hs.z, 10, '#ff8a1a', 0.8);
+    World.ring(hs.x, hs.z, 10, fxc.ring, 0.8);
     S.enemies.forEach(e => { e.stun = Math.max(e.stun, 2.6); });
     S.timers.push({ t: 0.45, fn: () => World.phoenixSweep(1.1) });
     S.timers.push({ t: 0.75, fn: ultImpact });
   }
   function ultImpact() {
     S.white = 0.35; S.shake = 18; S.hitStop = 0.1;
-    Sound.play('fireHit', 'phoenix');
+    heroSfx('heroHit', 'phoenix');
     const pow = 1 + MOD.ultPow;
-    // 길 전체에 불화살 비
+    // 길 전체에 불화살 비 (영웅마다: 빛의 창 / 얼음 수정 / 번개 표창)
     for (let i = 0; i < 22; i++) {
       const p = World.pathAt(Math.random());
       World.fireRain(p.x + (Math.random() - 0.5) * 3, p.z + (Math.random() - 0.5) * 3, Math.random() * 0.9, null);
+    }
+    const hid = World.heroId;
+    for (let i = 0; i < 16; i++) {
+      const k = i / 16, d = Math.random() * 0.8;
+      S.timers.push({ t: d, fn: () => {
+        const p = World.pathAt(k + Math.random() / 16);
+        if (hid === 'rai') World.zap(p.x + (Math.random() - 0.5) * 2, 16, p.z + (Math.random() - 0.5) * 2, p.x, 0.2, p.z, 0.22);
+        else if (hid === 'seori') World.iceSpike(p.x + (Math.random() - 0.5) * 2.5, p.z + (Math.random() - 0.5) * 2.5, 1.4 + Math.random());
+        else if (hid === 'sol') World.pillar(p.x, p.z, '#fff3a0', 9);
+      } });
     }
     // 적마다 불화살 세 발: 마지막 화살이 꽂히면 처치 (보스는 정답 1개 분량)
     S.enemies.slice().sort((a, b) => b.t - a.t).forEach((e, i) => {
@@ -611,7 +628,7 @@
     const tier = S.combo >= 10 ? 'phoenix' : S.combo >= 5 ? 'volley' : 'arrow';
     World.heroShoot(e.x, e.z);
     Sound.play('correct', S.combo);
-    Sound.play('fireShot', tier);
+    heroSfx('heroShot', tier);
     flashBox('right');
     addGauge(0.05 * (1 + 0.05 * S.up.hero) * (1 + MOD.heroCharge)); // 정답 약 20개면 가득
     const lethal = last && !shieldBreak;
@@ -633,7 +650,7 @@
       e.hint = false;
     }
     World.fireArrow(e, tier, pos => {
-      Sound.play('fireHit', tier);
+      heroSfx('heroHit', tier);
       if (tier === 'phoenix') {
         S.shake = Math.max(S.shake, 7);
         // 불사조의 불길: 주변 적을 지치게 만듦 (마지막 한 방은 여전히 정답만)
@@ -815,6 +832,7 @@
     else showResults({ wave: clearedWave, stars, bonus, ws, clearScore });
     submitScore();
     newMaps.forEach((m, i) => setTimeout(() => announceMap(m), 600 + i * 900));
+    HERO_ORDER.filter(h => newMaps.includes(HEROES[h].map)).forEach((h, i) => setTimeout(() => announceHero(h), 1500 + i * 900));
   }
   // 새 맵이 열렸을 때 크게 알림
   function announceMap(id) {
@@ -822,6 +840,15 @@
     const t = document.createElement('div');
     t.className = 'toast map-toast';
     t.innerHTML = `<div class="medal" style="background:#ffd23f">${I(m.icon)}</div><div><small>새 맵이 열렸어요!</small><b>${m.name}</b><small class="sub">처음 화면 → 새 게임에서 고를 수 있어요</small></div>`;
+    $('toasts').appendChild(t);
+    Sound.play('achieve');
+    setTimeout(() => t.remove(), 5500);
+  }
+  function announceHero(id) {
+    const H = HEROES[id];
+    const t = document.createElement('div');
+    t.className = 'toast map-toast';
+    t.innerHTML = `<div class="medal" style="background:${H.color}">${I(H.icon)}</div><div><small>새 영웅이 합류했어요!</small><b>${H.name}</b><small class="sub">처음 화면 → 영웅에서 고를 수 있어요</small></div>`;
     $('toasts').appendChild(t);
     Sound.play('achieve');
     setTimeout(() => t.remove(), 5500);
@@ -1268,9 +1295,14 @@
     $('lgPin').value = ''; $('lgPin2').value = '';
     lgMsg('');
     show('title');
+    Profile.useOwner(Account.owner);
     refreshTitle();
     showBanner(`${I('star')} ${created ? '새 계정을 만들었어요!' : '어서 와요,'} ${esc(Account.account.nick)}`, 'good', 1800);
-    Account.sync().then(() => refreshTitle());
+    syncAll();
+  }
+  // 저장 목록과 플레이 기록(열린 맵·영웅·업적)을 서버와 맞춤
+  function syncAll() {
+    return Promise.all([Account.sync(), Account.syncProfile()]).then(() => { refreshTitle(); titleNotices(); });
   }
   $('loginForm').addEventListener('submit', lgLogin);
   $('lgCreate').onclick = lgCreate;
@@ -1293,15 +1325,89 @@
       $('btnLogout').onclick = () => {
         const b = $('btnLogout');
         if (!b.classList.contains('confirm')) { b.classList.add('confirm'); b.textContent = '정말 로그아웃?'; return; }
-        Account.logout().then(() => { hide('title'); openLogin(); });
+        Account.pushProfile().then(() => Account.logout()).then(() => { Profile.useOwner('guest'); hide('title'); openLogin(); });
       };
     }
+    World.setHero(Profile.hero());
+    heroStrip();
     const stars = MAP_ORDER.reduce((s, m) => s + Profile.bestStars(m), 0);
     const open = MAP_ORDER.filter(m => Profile.unlocked(m)).length;
     loadPlayerStats();
     $('bestInfo').innerHTML = `${I('map')} 열린 맵 ${open}/4 · ${I('star')} 별 ${stars}/12 · ${I('trophy')} 업적 ${Profile.achCount()}/${ACH.length}`;
     $('achCount').textContent = `${Profile.achCount()}/${ACH.length}`;
   }
+  // ================= 영웅 고르기 =================
+  const josaWa = w => ((w.charCodeAt(w.length - 1) - 0xAC00) % 28 ? '과' : '와');
+  function heroStrip() {
+    const id = Profile.hero(), H = HEROES[id];
+    $('heroBtn').querySelector('.face').innerHTML = I(H.icon);
+    const open = HERO_ORDER.filter(h => Profile.heroUnlocked(h)).length;
+    $('btnHero').innerHTML = `<img src="${World.portraitOf('hero', id)}" alt=""><span><small>함께하는 영웅</small><b style="color:${H.color}">${H.name}</b></span><em>영웅 고르기 <b>${open}/${HERO_ORDER.length}</b></em>`;
+  }
+  function useHero(id) {
+    Profile.setHero(id);
+    World.setHero(Profile.hero());
+    heroStrip();
+  }
+  function openHeroes(focus) {
+    Sound.init();
+    hide('title');
+    focus = HEROES[focus] ? focus : Profile.hero();
+    const cur = Profile.hero();
+    const cards = HERO_ORDER.map(id => {
+      const H = HEROES[id], ok = Profile.heroUnlocked(id);
+      return `<button class="hero-card ${ok ? '' : 'lock'} ${id === focus ? 'focus' : ''} ${id === cur ? 'on' : ''}" data-hero="${id}" style="--hc:${H.color}">
+        ${id === cur ? `<span class="badge">함께하는 중</span>` : ''}
+        <img src="${World.portraitOf('hero', id, { dark: !ok })}" alt="">
+        <small class="ht">${ok ? H.name.slice(0, -H.short.length).trim() : ''}</small><b>${ok ? H.short : '???'}</b><small>${ok ? '' : `${I('lock')} ${MAPS[H.map].name}`}</small></button>`;
+    }).join('');
+    const H = HEROES[focus], ok = Profile.heroUnlocked(focus);
+    const info = ok
+      ? `<h3 style="color:${H.color}">${I(H.icon)} ${H.name}</h3><p>${H.lore}</p>
+         <div class="hero-moves"><span>정답 공격</span><b>${H.tiers.join(' → ')}</b><span>필살기</span><b>${H.ult}</b></div>
+         ${focus === cur ? `<p class="hero-on">${I('check')} 지금 함께하고 있어요</p>` : `<button class="big-btn" id="heroPick">${I('hero')} ${H.short}${josaWa(H.short)} 함께하기</button>`}`
+      : `<h3>${I('lock')} 아직 잠겨 있어요</h3><p><b>${MAPS[H.map].name}</b> 맵이 열리면 새 영웅이 합류해요. 앞 맵에서 10웨이브를 넘겨 보세요!</p>`;
+    openModal(`${I('hero')} 영웅`, `<div class="hero-grid">${cards}</div><div class="hero-info">${info}</div>
+      <p class="stat-line" style="font-size:12.5px;color:#6b7a88">영웅마다 모습과 공격 연출이 달라요. 힘은 모두 같아서 랭킹에도 공평해요.</p>`);
+    mball('[data-hero]').forEach(b => b.onclick = () => { Sound.play('key'); openHeroes(b.dataset.hero); });
+    const pick = mb('#heroPick');
+    if (pick) pick.onclick = () => { useHero(focus); Sound.play('pick'); openHeroes(focus); };
+  }
+
+  // ================= 처음 화면 알림 (업데이트 안내 · 새 영웅) =================
+  const NOTICE_VER = 2;
+  function titleNotices() {
+    if (S.mode !== 'title' || modalOpen || !$('login').classList.contains('hidden')) return;
+    const P = Profile.data;
+    if ((P.notice || 0) < NOTICE_VER) {
+      P.notice = NOTICE_VER; Profile.flush();
+      hide('title');
+      openModal(`${I('crown')} 큰 업데이트!`, `<div class="notice">
+        <div class="nt"><span>${I('crown')}</span><div><b>랭킹이 생겼어요</b><small>적을 쓰러뜨리면 점수를 얻어요. 난이도마다 <b>한 판 최고 점수</b>로 전체 · 우리 학교 순위를 매겨요. 처음 화면의 <b>랭킹</b>에서 확인!</small></div></div>
+        <div class="nt"><span>${I('lock')}</span><div><b>학교 · 닉네임 · 비밀번호 4자리로 들어가요</b><small>비밀번호는 꼭 기억해 두세요. <b>10번 틀리면 10분 동안 잠겨요.</b> 잊어버리면 새 닉네임으로 다시 만들어야 해요.</small></div></div>
+        <div class="nt"><span>${I('scroll')}</span><div><b>저장 방법이 바뀌었어요</b><small>게임 한 판마다 저장이 하나씩 생겨요. <b>이어하기</b>에서 골라 이어하고, <b>다른 기기</b>에서도 같은 계정으로 들어가면 이어할 수 있어요.</small></div></div>
+        <div class="nt"><span>${I('hero')}</span><div><b>새 영웅 3명!</b><small>사막 · 설원 · 화산 맵을 열 때마다 새 영웅이 합류해요. 처음 화면의 <b>영웅</b>에서 골라요.</small></div></div>
+        <button class="big-btn" id="noticeOk">${I('play')} 알겠어요!</button></div>`);
+      mb('#noticeOk').onclick = () => { closeModal(); show('title'); setTimeout(titleNotices, 300); };
+      return;
+    }
+    const fresh = Profile.newHeroes();
+    if (fresh.length) {
+      const id = fresh[0], H = HEROES[id];
+      Profile.markHeroSeen(id);
+      hide('title');
+      Sound.play('evolve');
+      openModal(`${I('star')} 새 영웅 합류!`, `<div class="hero-join" style="--hc:${H.color}">
+        <div class="hj-art"><img src="${World.portraitOf('hero', id)}" alt=""></div>
+        <h3>${I(H.icon)} ${H.name}</h3>
+        <p><b>${MAPS[H.map].name}</b> 맵이 열려서 새 영웅이 왔어요!</p><p class="lore">${H.lore}</p>
+        <button class="big-btn" id="hjUse">${I('hero')} 바로 함께하기</button>
+        <button class="big-btn alt" id="hjLater">나중에 고를래요</button></div>`);
+      mb('#hjUse').onclick = () => { useHero(id); Sound.play('pick'); closeModal(); show('title'); setTimeout(titleNotices, 300); };
+      mb('#hjLater').onclick = () => { closeModal(); show('title'); setTimeout(titleNotices, 300); };
+    }
+  }
+
   // ================= QR코드로 공유 (교실용) =================
   // 게임 주소를 QR코드로 보여 줌. 서버에서 열었으면 그 주소, 파일로 열었으면 배포 주소
   const HOME_URL = 'https://multiplication-defense.chaessam.workers.dev/';
@@ -1400,6 +1506,7 @@
     refreshTitle();
     show('title');
     updateHud(true);
+    setTimeout(titleNotices, 500);
   }
 
   // ---------- 모달 ----------
@@ -1675,6 +1782,7 @@
   // ---------- 점수 보내기 · 랭킹 ----------
   const fmt = n => Number(n || 0).toLocaleString('ko-KR');
   function submitScore() {
+    Account.pushProfile();
     if (!S.ranked || !S.runId || !Account.account) return;
     const payload = { runId: S.runId, diff: S.lowest, map: S.map, wave: S.wave, score: S.score || 0, cleared: !!S.cleared };
     Account.submitScore(payload).then(r => {
@@ -1798,10 +1906,15 @@
           <img src="${World.portraitOf('tower', t, { lvl: l, dark: !seen })}" alt=""><b>${seen ? L.name : '???'}</b><small>Lv.${l}</small></button>`;
       })).join('');
     } else {
-      grid = `<button class="dexc" data-dex="hero"><img src="${World.portraitOf('hero', 'hero')}" alt=""><b>${HERO.name}</b><small>필살기 ${P.ults}회</small></button>`;
+      grid = HERO_ORDER.map(id => {
+        const ok = Profile.heroUnlocked(id), H = HEROES[id];
+        return `<button class="dexc ${ok ? '' : 'lock'}" data-dex="hero:${id}">
+          ${Profile.hero() === id ? '<span class="badge">함께하는 중</span>' : ''}
+          <img src="${World.portraitOf('hero', id, { dark: !ok })}" alt=""><b>${ok ? H.name : '???'}</b><small>${ok ? H.weapon : `${MAPS[H.map].name} 열면`}</small></button>`;
+      }).join('');
     }
-    const total = DEX_ENEMIES.length + 9 + 1;
-    const found = DEX_ENEMIES.filter(t => P.seen[t]).length + Object.keys(P.towerForms).length + (P.seen.hero ? 1 : 0);
+    const total = DEX_ENEMIES.length + 9 + HERO_ORDER.length;
+    const found = DEX_ENEMIES.filter(t => P.seen[t]).length + Object.keys(P.towerForms).length + HERO_ORDER.filter(id => Profile.heroUnlocked(id)).length;
     const html = `
       <div class="tabs">${[['enemy', '몬스터'], ['tower', '탑'], ['hero', '영웅']].map(([k, n]) => `<button data-tab="${k}" class="${k === tab ? 'on' : ''}">${n}</button>`).join('')}</div>
       <p class="stat-line" style="font-size:13px;color:#6b7a88">수집 ${found} / ${total}</p>
@@ -1840,13 +1953,15 @@
           ${L.special ? `<span>특수 능력</span><b>${L.special}</b>` : ''}
         </div>` : ''}</div>`;
     } else {
-      html += `<img src="${World.portraitOf('hero', 'hero')}" alt="">
-        <div><h3>${HERO.name}</h3><p>${HERO.lore}</p><div class="dex-stats">
-          <span>기본 공격</span><b>불화살 장궁 (피해 ${HERO.dmg})</b>
-          <span>필살기</span><b>용사의 심판 — 모든 적에게 황금 검을 내리꽂고 잠시 기절시켜요</b>
-          <span>게이지</span><b>정답 1개에 12%씩 충전</b>
-          <span>필살기 사용</span><b>${P.ults}회</b>
-        </div></div>`;
+      const hid = HEROES[id] ? id : 'arin', H = HEROES[hid], ok = Profile.heroUnlocked(hid);
+      html += `<img src="${World.portraitOf('hero', hid, { dark: !ok })}" alt="">
+        <div><h3>${ok ? H.name : '???'}</h3><p>${ok ? H.lore : `${MAPS[H.map].name} 맵이 열리면 함께할 수 있어요.`}</p>${ok ? `<div class="dex-stats">
+          <span>무기</span><b>${H.weapon} (피해 ${HERO.dmg})</b>
+          <span>정답 공격</span><b>${H.tiers.join(' → ')}</b>
+          <span>필살기</span><b>${H.ult} — 모든 적을 멈추고, 쓰러뜨리거나 크게 지치게 해요</b>
+          <span>게이지</span><b>정답 20개쯤이면 가득</b>
+          <span>필살기 사용</span><b>${P.ults}회 (모든 영웅 합계)</b>
+        </div>` : ''}</div>`;
     }
     html += '</div>';
     openModal(`${I('book')} 도감`, html);
@@ -1878,9 +1993,10 @@
       <li>지친 적에는 주황색 <b>막타!</b> 표시가 떠요. 이때 맞히면 골드 1.5배!</li>
       <li><b>보통·어려움·매우 어려움</b>: 아직 지치지 않은 적에게 정답을 맞히면 <b>방패만 깨지고</b> 새 문제가 나와요. 한 번 더 맞혀야 쓰러져요. 탑으로 적을 지치게 만들어 두면 정답 한 번에 끝!</li></ul>
       <h3>${I('hero')} 구구단 + 영웅</h3>
-      <ul><li>적 머리 위 문제(예: <b>7 × 8</b>)의 답을 입력하면 영웅이 <b>불화살</b>을 쏴서 적을 쓰러뜨리고 <b>골드</b>를 얻어요.</li>
-      <li>콤보 1~4 불화살 → 5~9 <b>3연발</b> → 10부터 <b>불사조 화살</b>! 연속으로 맞힐수록 공격이 화려해져요.</li>
-      <li>정답을 맞힐수록 영웅 게이지가 차요. 가득 차면 오른쪽 아래 버튼(또는 Q키)으로 필살기 <b>용사의 심판</b>!</li>
+      <ul><li>적 머리 위 문제(예: <b>7 × 8</b>)의 답을 입력하면 영웅이 공격해서 적을 쓰러뜨리고 <b>골드</b>와 <b>점수</b>를 얻어요.</li>
+      <li>콤보 1~4 한 발 → 5~9 <b>3연발</b> → 10부터 <b>불사조·독수리·용</b>! 연속으로 맞힐수록 공격이 화려해져요.</li>
+      <li>정답을 맞힐수록 영웅 게이지가 차요. 가득 차면 오른쪽 아래 버튼(또는 Q키)으로 <b>필살기</b>!</li>
+      <li>영웅은 4명: <b>아린</b>(불화살), <b>솔</b>(빛의 창, 사막 맵을 열면), <b>서리</b>(얼음 수정, 설원 맵을 열면), <b>라이</b>(번개 표창, 화산 맵을 열면). 처음 화면의 <b>영웅</b>에서 골라요. 모습과 연출만 다르고 힘은 같아요.</li>
       <li>같은 답의 적이 여럿이면 성에 가장 가까운 적(노란 말풍선)부터 맞아요. 큰 적은 여러 번 맞혀야 해요(● 개수).</li></ul>
       <h3>${I('bow')} 탑 · 레벨업 · 진화</h3>
       <ul><li>빈 칸(+)을 눌러 궁수탑 · 대포 · 서리 마법탑을 세워요. 세운 탑을 누르면 레벨업할 수 있어요.</li>
@@ -2054,6 +2170,7 @@
   $('btnHelp').onclick = openHelp;
   $('btnShare').onclick = openShare;
   $('btnRank').onclick = () => { Sound.init(); openRanking(); };
+  $('btnHero').onclick = () => openHeroes();
   $('btnBook').onclick = () => openBook();
   $('btnAch').onclick = openAchievements;
   $('btnRetry').onclick = () => {
@@ -2106,15 +2223,20 @@
   S.map = World.mapId;
   resize();
   World.setTitleCam(true);
+  Profile.useOwner(Account.owner);
   refreshTitle();
   // 로그인해야만 플레이: 이 기기에 로그인 표시가 없으면 로그인 화면부터
   if (Account.required && !Account.session) openLogin();
-  else if (Account.required) Account.verify().then(ok => { if (!ok) openLogin(); else Account.sync().then(() => refreshTitle()); });
+  else if (Account.required) Account.verify().then(ok => { if (!ok) { Profile.useOwner('guest'); openLogin(); } else syncAll(); });
+  else titleNotices();
+  // 플레이 기록은 바뀐 것이 있을 때 가끔, 그리고 화면을 떠날 때 서버에 올림
+  setInterval(() => { if (S.mode !== 'wave') Account.pushProfile(); }, 30000);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) Account.pushProfile(); });
   updateControls();
   requestAnimationFrame(frame);
   if (window.ResizeObserver) new ResizeObserver(() => resize()).observe(wrap);
 
   // 디버그/테스트용
-  window.__game = { S, World, Profile, openDiffChange, startWave, newGame, submit, pressDigit, useSkill, useUlt, buildWave, openBuild, openTower, openCards, openBook, openAchievements, openMapSelect, waveClear, spawnEnemy, computeMods, forceSave: save };
+  window.__game = { S, World, Profile, openDiffChange, startWave, newGame, submit, pressDigit, useSkill, useUlt, buildWave, openBuild, openTower, openCards, openBook, openAchievements, openMapSelect, waveClear, spawnEnemy, computeMods, forceSave: save, openHeroes, useHero, titleNotices };
   window.__gameReady = true; // index.html의 안전장치가 '게임이 잘 시작됨'을 알 수 있게
 })();

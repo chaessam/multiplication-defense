@@ -202,6 +202,28 @@ const Account = (() => {
     lsDel(OLD_SAVES_KEY); lsDel(OLD_SAVE_KEY);
   }
 
+  // ---------- 플레이 기록 (열린 맵·영웅·업적·도감) ----------
+  // 서버 기록과 합친 뒤, 합친 것을 다시 올림. 서버도 같은 방식으로 합쳐서 기기끼리 기록을 잃지 않음
+  let profileBusy = false;
+  async function syncProfile() {
+    if (!hasServer || !session || profileBusy) return { ok: false, local: true };
+    profileBusy = true;
+    try {
+      const r = await api('GET', '/api/profile');
+      if (!r.ok) return r;
+      if (r.data) Profile.merge(r.data);
+      return await pushProfile(true);
+    } finally { profileBusy = false; }
+  }
+  async function pushProfile(force) {
+    if (!hasServer || !session || (!force && !Profile.changed)) return { ok: true };
+    const at = Profile.changed;
+    Profile.flush();
+    const r = await api('PUT', '/api/profile', { data: Profile.data });
+    if (r.ok && Profile.changed === at) Profile.clearChanged();
+    return r;
+  }
+
   // ---------- 점수·랭킹 ----------
   // 웨이브를 넘길 때마다 이번 판의 점수를 보냄. 서버가 가능한 점수인지 확인하고 난이도별 최고 기록을 남김
   async function submitScore(run) {
@@ -214,7 +236,8 @@ const Account = (() => {
   }
 
   return {
-    hasServer, submitScore, getRank,
+    hasServer, submitScore, getRank, syncProfile, pushProfile,
+    get owner() { return owner(); },
     get required() { return hasServer; },
     get session() { return session; },
     get account() { return session ? session.account : null; },

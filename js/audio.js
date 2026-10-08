@@ -344,6 +344,29 @@ const Sound = (() => {
       noise(0.18, 0.1, 3200, 'highpass', 0.02);
       tone('sine', big ? 130 : 160, 45, big ? 0.5 : 0.25, big ? 0.45 : 0.22);
     },
+    // 영웅마다 다른 공격 소리 (아린은 불화살 그대로)
+    heroShot(hero = 'arin', tier = 'arrow') {
+      const big = tier === 'phoenix', n = tier === 'volley' ? 3 : 1;
+      if (hero === 'arin') return this.fireShot(tier);
+      for (let i = 0; i < n; i++) {
+        const d = i * 0.09;
+        if (hero === 'sol') { tone('triangle', 520, 1400, 0.16, 0.09, d); noise(0.22, 0.1, 2400, 'bandpass', d, 1.2); bell(1568, 0.04, d + 0.03, 0.25); }
+        else if (hero === 'seori') { bell(2093, 0.06, d, 0.3); bell(2637, 0.04, d + 0.03, 0.3); noise(0.2, 0.1, 5000, 'highpass', d); }
+        else { tone('square', 1800, 300, 0.12, 0.05, d); tone('sawtooth', 900, 120, 0.15, 0.05, d + 0.02); noise(0.12, 0.12, 4000, 'bandpass', d, 3); }
+      }
+      if (big) {
+        if (hero === 'sol') { [784, 988, 1175, 1568].forEach((f, i) => bell(f, 0.07, 0.03 + i * 0.04, 0.5)); tone('sine', 300, 900, 0.5, 0.08); }
+        else if (hero === 'seori') { tone('sine', 1200, 400, 0.6, 0.08); [1568, 2093, 2637].forEach((f, i) => bell(f, 0.06, i * 0.05, 0.6)); }
+        else { tone('sawtooth', 80, 1600, 0.4, 0.1); noise(0.5, 0.18, 2500, 'bandpass', 0.05, 2); }
+      }
+    },
+    heroHit(hero = 'arin', tier = 'arrow') {
+      const big = tier === 'phoenix';
+      if (hero === 'arin') return this.fireHit(tier);
+      if (hero === 'sol') { tone('sine', big ? 220 : 300, 90, big ? 0.5 : 0.25, big ? 0.35 : 0.18); bell(big ? 1046 : 1318, 0.07, 0, 0.4); noise(big ? 0.4 : 0.2, 0.12, 2600, 'bandpass'); }
+      else if (hero === 'seori') { noise(big ? 0.5 : 0.25, big ? 0.22 : 0.14, 6000, 'highpass'); bell(big ? 1318 : 1760, 0.06, 0, 0.5); tone('sine', 400, 120, 0.25, big ? 0.3 : 0.15); }
+      else { noise(big ? 0.45 : 0.22, big ? 0.3 : 0.18, 3000, 'bandpass', 0, 4); tone('square', big ? 140 : 200, 40, big ? 0.4 : 0.2, big ? 0.2 : 0.1); tone('sine', 120, 40, 0.3, big ? 0.35 : 0.15); }
+    },
     wrong() { tone('sawtooth', 200, 120, 0.25, 0.16); tone('square', 150, 95, 0.28, 0.08, 0.05); },
     arrow() { noise(0.09, 0.12, 2800, 'bandpass', 0, 2); tone('triangle', 420, 900, 0.07, 0.04); },
     bolt() { noise(0.12, 0.14, 3500, 'bandpass', 0, 2); tone('sine', 900, 1800, 0.1, 0.06); },
