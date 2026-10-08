@@ -2031,7 +2031,7 @@
     if (modalOpen || S.mode === 'title' || S.mode === 'over') return;
     openModal(`${I('pause')} 일시정지`, `<div class="pause-menu">
       <button class="big-btn" data-p="resume">${I('play')} 계속하기</button>
-      <div class="menu-row">
+      <div class="menu-row three">
         <button class="mini-btn" data-p="book">${I('book')}도감</button>
         <button class="mini-btn" data-p="ach">${I('trophy')}업적</button>
         <button class="mini-btn" data-p="help">${I('scroll')}방법</button>
