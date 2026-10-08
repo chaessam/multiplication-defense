@@ -572,12 +572,15 @@
     if (S.ws) { S.ws.correct++; S.ws.combo = Math.max(S.ws.combo, S.combo); }
     Profile.correct(e.q.a, S.combo);
     const comboBonus = Math.min(MOD.comboCap, Math.floor(S.combo / 5) * 2 * MOD.comboX);
-    const finisher = e.exhausted ? 1.5 : 1; // 지친 적에게 막타 보너스
+    const last = e.def.probs <= 1 || e.probsLeft <= 1;
+    // 방패 규칙(보통 이상): 마지막 한 방은 '막타!'(지친) 상태일 때만. 아니면 이번 정답은 방패만 깨고 새 문제가 나옴
+    const shieldBreak = last && D().shield2 && !e.exhausted;
+    const finisher = e.exhausted ? 1.5 : shieldBreak ? 0.6 : 1; // 지친 적에게 막타 보너스, 방패 깨기는 골드 조금
     const gold = Math.round((4 + e.q.a) * (1 + 0.15 * S.up.bounty) * D().gold * (MOD.danGold[e.q.a] ? 2 : 1) * finisher) + comboBonus;
     S.gold += gold;
     if (S.ws) S.ws.gold += gold;
     const c = enemyCenter(e);
-    floater(c.x, World.enemyHeadY(e) + 0.4, c.z, finisher > 1 ? `막타 +${gold}` : `+${gold}`, '#ffd34a', 24, 'coin');
+    floater(c.x, World.enemyHeadY(e) + 0.4, c.z, finisher > 1 ? `막타 +${gold}` : `+${gold}`, '#ffd34a', shieldBreak ? 18 : 24, 'coin');
     // 영웅이 장궁으로 불화살을 쏨: 콤보 1~4 불화살, 5~9 3연발, 10부터 불사조 화살
     const tier = S.combo >= 10 ? 'phoenix' : S.combo >= 5 ? 'volley' : 'arrow';
     World.heroShoot(e.x, e.z);
@@ -585,9 +588,14 @@
     Sound.play('fireShot', tier);
     flashBox('right');
     addGauge(0.05 * (1 + 0.05 * S.up.hero) * (1 + MOD.heroCharge)); // 정답 약 20개면 가득
-    const lethal = e.def.probs <= 1 || e.probsLeft <= 1;
+    const lethal = last && !shieldBreak;
     if (lethal) e.doomed = true; // 화살이 꽂힐 때까지 다른 답의 대상이 되지 않음
-    else {
+    else if (shieldBreak) {
+      exhaust(e);
+      e.hp = Math.min(e.hp, hpFloor(e) + e.maxHp * 0.0001);
+      e.q = makeProblem(e.def.boss);
+      e.hint = false;
+    } else {
       const per = e.maxHp / e.def.probs;
       e.probsLeft--;
       e.hp = Math.min(e.hp, e.probsLeft * per);
@@ -610,6 +618,14 @@
       if (lethal) {
         e.hp = 0; kill(e);
         S.hitStop = Math.max(S.hitStop, 0.05);
+      } else if (shieldBreak) {
+        e.hitT = 0.2;
+        knock(e, e.def.boss ? 0.3 : 0.7, true);
+        const hy = World.enemyHeadY(e);
+        floater(e.x, hy + 1.1, e.z, '방패 깨짐! 한 번 더!', '#9fe6ff', 18);
+        World.ring(e.x, e.z, 1.4, '#9fe6ff');
+        World.burst(e.x, hy - 0.3, e.z, 14, ['#9fe6ff', '#ffffff', '#5a7a8a'], 0.9);
+        Sound.play('frost');
       } else {
         e.hitT = 0.2;
         knock(e, e.def.boss ? 0.4 : 1.0, true);
@@ -1694,7 +1710,8 @@
       <ul><li>길을 따라 몰려오는 적들로부터 성을 지키세요. 30웨이브의 최종 보스 <b>마왕</b>을 쓰러뜨리면 클리어!</li></ul>
       <h3>${I('shield')} 가장 중요한 규칙</h3>
       <ul><li>적은 모두 <b>구구단 방패</b>를 들고 있어요. 탑·스킬은 적을 <b>지치게(느리게)</b> 만들 뿐, 마지막 한 방은 <b>구구단 정답</b>으로만 쓰러뜨릴 수 있어요!</li>
-      <li>지친 적에는 주황색 <b>막타!</b> 표시가 떠요. 이때 맞히면 골드 1.5배!</li></ul>
+      <li>지친 적에는 주황색 <b>막타!</b> 표시가 떠요. 이때 맞히면 골드 1.5배!</li>
+      <li><b>보통·어려움·매우 어려움</b>: 아직 지치지 않은 적에게 정답을 맞히면 <b>방패만 깨지고</b> 새 문제가 나와요. 한 번 더 맞혀야 쓰러져요. 탑으로 적을 지치게 만들어 두면 정답 한 번에 끝!</li></ul>
       <h3>${I('hero')} 구구단 + 영웅</h3>
       <ul><li>적 머리 위 문제(예: <b>7 × 8</b>)의 답을 입력하면 영웅이 <b>불화살</b>을 쏴서 적을 쓰러뜨리고 <b>골드</b>를 얻어요.</li>
       <li>콤보 1~4 불화살 → 5~9 <b>3연발</b> → 10부터 <b>불사조 화살</b>! 연속으로 맞힐수록 공격이 화려해져요.</li>
