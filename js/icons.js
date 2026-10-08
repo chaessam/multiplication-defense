@@ -61,6 +61,7 @@ const Icons = (() => {
     hero: `<path d="M6 30c0-7 4-11 10-11s10 4 10 11z" fill="#3f6fd8" ${sw}/><circle cx="16" cy="12" r="7" fill="#f2c39c" ${sw}/><path d="M8 11c0-6 4-9 8-9s8 3 8 9l-3-2-5 2-5-2z" fill="#ffd23f" ${sw}/><circle cx="13" cy="13" r="1.2" fill="#13222f"/><circle cx="19" cy="13" r="1.2" fill="#13222f"/>`,
     card: `<rect x="6" y="3" width="20" height="26" rx="3" fill="#7b6cf0" ${sw}/><path d="M16 9l2 4 4 .5-3 3 .8 4.5L16 19l-3.8 2 .8-4.5-3-3 4-.5z" fill="#ffd23f"/>`,
     check: `<path d="M5 17l7 7L27 8" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 17l7 7L27 8" fill="none" ${sw}/>`,
+    retry: `<path d="M25 16a9 9 0 1 1-3-6.7" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/><path d="M25 16a9 9 0 1 1-3-6.7" fill="none" stroke="#3fae5a" stroke-width="3.6" stroke-linecap="round"/><path d="M19 4l5 5.5-6.5 2z" fill="#3fae5a" ${sw}/>`,
     back: `<path d="M12 6h15v20H12L3 16z" fill="#fff" ${sw}/><path d="M15 12l7 8M22 12l-7 8" ${sw}/>`,
     close: `<path d="M8 8l16 16M24 8L8 24" stroke="#fff" stroke-width="4" stroke-linecap="round"/>`,
     sun: `<circle cx="16" cy="16" r="7" fill="#ffd23f" ${sw}/><path d="M16 2v4M16 26v4M2 16h4M26 16h4M6 6l3 3M23 23l3 3M6 26l3-3M23 9l3-3" ${sw}/>`,

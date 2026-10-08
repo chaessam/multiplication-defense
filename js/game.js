@@ -795,6 +795,8 @@
   }
   function startWave() {
     if (S.mode !== 'prep' || S.pendingCards) return;
+    if (!S.runId) S.runId = Account.newRunId();
+    S.preWave = snapshot(); // 이 웨이브를 다시 도전할 때 돌아갈 상태 (웨이브 시작 직전)
     S.mode = 'wave';
     S.queue = buildWave(S.wave);
     S.spawnT = S.queue[0].delay;
@@ -887,15 +889,18 @@
   // ================= 저장 / 불러오기 =================
   function lsGet(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
   // 게임 한 판 = 저장 하나 (js/account.js가 이 기기와 서버에 함께 보관)
-  function save() {
-    if (S.mode !== 'prep') return;
-    if (!S.runId) S.runId = Account.newRunId();
-    Account.putRun({
+  function snapshot() {
+    return JSON.parse(JSON.stringify({
       v: 3, id: S.runId, map: S.map, diff: S.diff, lowest: S.lowest, cleared: S.cleared, wave: S.wave, gold: S.gold, gems: S.gems, castleHp: S.castleHp,
       up: S.up, towers: S.towers.map(t => ({ slot: t.slot, type: t.type, lvl: t.lvl, paid: t.paid })),
       cards: S.cards, pendingCards: S.pendingCards, heroGauge: S.heroGauge,
       stats: S.stats, bestCombo: S.bestCombo, score: S.score || 0, ranked: !!S.ranked, savedAt: Date.now(),
-    });
+    }));
+  }
+  function save() {
+    if (S.mode !== 'prep') return;
+    if (!S.runId) S.runId = Account.newRunId();
+    Account.putRun(snapshot());
   }
   function loadSave(id) { const d = Account.getRun(id); return d ? upgradeSave(d) : null; }
   function allSaves() { return Account.listRuns().map(upgradeSave).filter(Boolean); }
@@ -919,6 +924,7 @@
   }
   function newGame(diff, map) {
     clearField(true);
+    S.preWave = null;
     S.runId = Account.newRunId();
     S.diff = S.lowest = DIFFS[diff] ? diff : 'normal';
     useMap(MAPS[map] ? map : 'forest');
@@ -935,6 +941,7 @@
   }
   function loadGame(d, fullHp) {
     clearField(true);
+    S.preWave = null;
     S.runId = d.id || Account.newRunId();
     S.diff = DIFFS[d.diff] ? d.diff : 'normal';
     S.lowest = DIFFS[d.lowest] ? d.lowest : S.diff;
@@ -1386,11 +1393,13 @@
     const P = Profile.data;
     if ((P.notice || 0) < NOTICE_VER) {
       P.notice = NOTICE_VER; Profile.flush();
+      const oldRuns = allSaves().filter(sv => !sv.ranked).length;
       hide('title');
       openModal(`${I('crown')} 큰 업데이트!`, `<div class="notice">
-        <div class="nt"><span>${I('crown')}</span><div><b>랭킹이 생겼어요</b><small>적을 쓰러뜨리면 점수를 얻어요. 난이도마다 <b>한 판 최고 점수</b>로 전체 · 우리 학교 순위를 매겨요. 처음 화면의 <b>랭킹</b>에서 확인!</small></div></div>
+        <div class="nt"><span>${I('crown')}</span><div><b>랭킹이 생겼어요</b><small>적을 쓰러뜨리면 점수를 얻어요. 난이도마다 <b>한 판 최고 점수</b>로 전체 · 우리 학교 순위를 매겨요. 처음 화면의 <b>랭킹</b>에서 확인!<br>랭킹에 들려면 <b>새 게임</b>으로 시작해야 해요. 업데이트 전에 하던 게임은 이어할 수 있지만 랭킹에는 들어가지 않아요.</small></div></div>
+        <div class="nt"><span>${I('retry')}</span><div><b>웨이브 다시 도전</b><small>웨이브 점수가 마음에 들지 않으면 결과 화면에서 <b>다시 도전</b>! 마지막으로 깬 점수만 총점에 들어가요.</small></div></div>
         <div class="nt"><span>${I('lock')}</span><div><b>학교 · 닉네임 · 비밀번호 4자리로 들어가요</b><small>비밀번호는 꼭 기억해 두세요. <b>10번 틀리면 10분 동안 잠겨요.</b> 잊어버리면 새 닉네임으로 다시 만들어야 해요.</small></div></div>
-        <div class="nt"><span>${I('scroll')}</span><div><b>저장 방법이 바뀌었어요</b><small>게임 한 판마다 저장이 하나씩 생겨요. <b>이어하기</b>에서 골라 이어하고, <b>다른 기기</b>에서도 같은 계정으로 들어가면 이어할 수 있어요.</small></div></div>
+        <div class="nt"><span>${I('scroll')}</span><div><b>저장 방법이 바뀌었어요</b><small>게임 한 판마다 저장이 하나씩 생겨요. <b>이어하기</b>에서 골라 이어하고, <b>다른 기기</b>에서도 같은 계정으로 들어가면 이어할 수 있어요.<br>${oldRuns ? `이 기기에서 하던 게임 <b>${oldRuns}개</b>가 방금 로그인한 계정의 <b>이어하기</b> 목록에 자동으로 옮겨져 있어요.` : '이 기기에서 업데이트 전에 하던 게임은 이 기기에서 처음 로그인한 계정의 <b>이어하기</b> 목록으로 자동으로 옮겨져요.'}</small></div></div>
         <div class="nt"><span>${I('hero')}</span><div><b>새 영웅 3명!</b><small>사막 · 설원 · 화산 맵을 열 때마다 새 영웅이 합류해요. 처음 화면의 <b>영웅</b>에서 골라요.</small></div></div>
         <button class="big-btn" id="noticeOk">${I('play')} 알겠어요!</button></div>`);
       mb('#noticeOk').onclick = () => { closeModal(); show('title'); setTimeout(titleNotices, 300); };
@@ -1673,10 +1682,20 @@
         <span>${I('trophy')} 총 점수</span><b class="score">${(S.score || 0).toLocaleString('ko-KR')}</b>
       </div>
       <p class="rank-note" id="rankNote">${S.ranked && Account.account ? '랭킹에 기록하는 중…' : !S.ranked ? '예전 저장으로 이어한 판이라 랭킹에는 들어가지 않아요.' : ''}</p>
-      <button class="big-btn" id="toCards">${I('card')} 보상 카드 고르기</button>`;
+      <button class="big-btn" id="toCards">${I('card')} 보상 카드 고르기</button>
+      ${S.preWave && S.preWave.wave === r.wave ? `<button class="big-btn alt retry-btn" id="retryWave">${I('retry')} 웨이브 ${r.wave} 다시 도전<small>이번 웨이브 점수 대신 다시 깬 점수가 들어가요</small></button>` : ''}`;
     openModal(`웨이브 ${r.wave} 승리!`, html, { noClose: true });
     for (let i = 0; i < r.stars; i++) setTimeout(() => Sound.play('star', i), 300 + i * 250);
     mb('#toCards').onclick = () => { closeModal(); openCards(); };
+    const rt = mb('#retryWave');
+    if (rt) rt.onclick = () => {
+      // 한 번 더 누르면 다시 도전: 웨이브 시작 직전 상태(골드·탑·성·점수)로 돌아감. 마지막으로 깬 점수만 총점에 들어감
+      if (!rt.classList.contains('confirm')) { rt.classList.add('confirm'); rt.innerHTML = `${I('retry')} 정말 다시 도전할까요?<small>골드·탑·점수가 웨이브 ${r.wave} 시작 전으로 돌아가요</small>`; return; }
+      const snap = S.preWave;
+      closeModal();
+      loadGame(snap, false);
+      showBanner(`${I('retry')} 웨이브 ${snap.wave} 다시 도전!`, 'good', 1600);
+    };
   }
 
   // 보상 카드
