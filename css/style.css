@@ -788,3 +788,9 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
 .retry-btn { margin-top: 8px; font-size: 16px; padding: 8px 12px; }
 .retry-btn small { font-size: 11.5px; }
 .retry-btn.confirm { background: linear-gradient(#ffcf5a, #e8a21f); }
+
+/* 일시정지: 지금 난이도 (게임 중에는 바꿀 수 없음) */
+.pause-diff { margin: 10px 0 8px; padding: 8px 10px; text-align: center; font-size: 15px; color: var(--ink); background: #fff; border: 2px dashed #b8cad8; border-radius: 12px; }
+.pause-diff b { font-weight: 400; color: #c0392b; }
+.pause-diff small { display: block; font-size: 12px; color: #6b7a88; }
+.pause-diff .ic { width: 1.1em; height: 1.1em; vertical-align: -3px; }
