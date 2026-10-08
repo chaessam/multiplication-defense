@@ -1,5 +1,6 @@
-// 전국 초·중·고등학교 목록 만들기 → data/schools.json
+// 전국 초등학교 목록 만들기 → data/schools.json (게임 대상이 초등학생)
 //   NEIS_API_KEY=발급받은키 node scripts/update-schools.mjs   (빠름, https://open.neis.go.kr 무료 인증키)
+//   ... --all                                                  (중·고등학교까지 넣을 때)
 //   node scripts/update-schools.mjs                            (키 없이: 한 번에 5개씩 받아서 오래 걸림)
 // 형식: { updated, source, count, schools: [[학교코드, 학교명, 시도, 시군구], ...] }
 // 전라남도·광주광역시는 2026-07-01 통합 → 모두 '전남광주'로 표기
@@ -9,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const OUT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'schools.json');
-const KINDS = ['초등학교', '중학교', '고등학교'];
+const KINDS = process.argv.includes('--all') ? ['초등학교', '중학교', '고등학교'] : ['초등학교'];
 const KEY = process.env.NEIS_API_KEY || '';
 const PAGE = KEY ? 1000 : 5;
 
@@ -65,7 +66,7 @@ async function main() {
     .map((r) => [t(r.SD_SCHUL_CODE), t(r.SCHUL_NM), shortSido(t(r.LCTN_SC_NM) || t(r.ORG_RDNMA).split(/\s+/)[0]), sigunguOf(t(r.ORG_RDNMA))])
     .filter((s) => !seen.has(s[0]) && seen.add(s[0]))
     .sort((a, b) => a[1].localeCompare(b[1], 'ko') || a[2].localeCompare(b[2], 'ko'));
-  const out = { updated: new Date().toISOString().slice(0, 10), source: 'NEIS 교육정보 개방 포털 학교기본정보 (초·중·고)', count: schools.length, schools };
+  const out = { updated: new Date().toISOString().slice(0, 10), source: `NEIS 교육정보 개방 포털 학교기본정보 (${KINDS.join('·')})`, count: schools.length, schools };
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
   fs.writeFileSync(OUT, JSON.stringify(out));
   console.log('저장:', OUT, schools.length, '곳');
