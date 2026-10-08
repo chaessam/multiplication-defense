@@ -36,9 +36,6 @@
     time: 0,
   };
   const D = () => DIFFS[S.diff] || DIFFS.normal;
-  const DIFF_ORDER = ['easy', 'normal', 'hard', 'expert'];
-  // 기록은 이번 판에서 고른 가장 쉬운 난이도로 남김 (쉬움으로 버티다 어려움으로 바꿔 기록 얻기 방지)
-  const easier = (a, b) => DIFF_ORDER.indexOf(a) <= DIFF_ORDER.indexOf(b) ? a : b;
   const MAPD = () => MAPS[S.map] || MAPS.forest;
 
   // ================= 화면 =================
@@ -1898,29 +1895,6 @@
     if (Account.account) Account.sync().then(r => { if (modalOpen && $('modalTitle').dataset.kind === 'saves') render(r && r.offline ? '서버에 연결하지 못해 이 기기의 저장만 보여요.' : ''); refreshTitle(); });
   }
 
-  // 게임 중 난이도 바꾸기 (일시정지 메뉴)
-  function openDiffChange() {
-    openModal(`${I(D().icon)} 난이도 바꾸기`, `<div class="opt-list">${Object.entries(DIFFS).map(([k, d]) => `
-      <button class="opt diff-${k} ${k === S.diff ? 'evolve' : ''}" data-diff="${k}">
-        <span class="icon">${I(d.icon)}</span>
-        <span class="info"><b>${d.name}</b>${k === S.diff ? ' <span class="lv-tag">지금</span>' : ''}<small>${d.desc}</small></span>
-      </button>`).join('')}</div>
-      <p class="stat-line" style="margin-top:10px;font-size:13px;color:#6b7a88">바꾼 난이도는 다음에 나오는 적부터 적용돼요.<br>기록(별)은 이번 판에서 고른 가장 쉬운 난이도로 남아요.</p>`);
-    mball('[data-diff]').forEach(b => b.onclick = () => {
-      const k = b.dataset.diff;
-      if (k !== S.diff) {
-        const ratio = S.castleHp / castleMax();
-        S.diff = k;
-        S.lowest = easier(S.lowest, k);
-        S.castleHp = Math.max(1, Math.round(castleMax() * ratio));
-        save();
-        showBanner(`${I(D().icon)} 난이도: ${D().name}`, 'good', 1600);
-        updatePrepInfo(); updateHud(true);
-      }
-      closeModal();
-    });
-  }
-
   // 도감
   function speedWord(s) { return s >= 1.3 ? '매우 빠름' : s >= 0.95 ? '보통' : s >= 0.6 ? '느림' : '매우 느림'; }
   function openBook(tab = 'enemy') {
@@ -2045,7 +2019,7 @@
       <ul><li>숲 → 사막 → 설원 → 화산. 앞 맵에서 10웨이브를 넘기면 다음 맵이 열려요. 새 맵은 처음 화면 → 새 게임에서 골라요.</li>
       <li>맵마다 그 땅에 사는 적이 나와요: 사막엔 미라와 거대 전갈, 설원엔 예티와 얼음 골렘, 화산엔 불꽃 임프와 용암 골렘!</li>
       <li><b>매우 어려움(19단)</b>: 11~19단이 나오고 후반엔 19 × 19까지! 답이 세 자리면 숫자 3개를 눌러요.</li>
-      <li>게임 중에도 일시정지 메뉴에서 난이도를 바꿀 수 있어요.</li>
+      <li>난이도는 새 게임을 시작할 때 골라요. 게임 중에는 바꿀 수 없어요.</li>
       <li>별: 10웨이브 ★, 20웨이브 ★★, 클리어 ★★★. 쉬움은 틀리면 건너뛰며 세기 힌트가 나와요.</li></ul>
       <h3>${I('book')} 도감 &amp; 업적</h3>
       <ul><li>만난 적과 세운 탑이 도감에 모이고, 업적을 달성하면 메달을 받아요. (이 기기에만 저장돼요)</li></ul>
@@ -2062,7 +2036,7 @@
         <button class="mini-btn" data-p="ach">${I('trophy')}업적</button>
         <button class="mini-btn" data-p="help">${I('scroll')}방법</button>
       </div>
-      <button class="big-btn alt" data-p="diff">${I(D().icon)} 난이도 바꾸기 <small>지금: ${D().name}</small></button>
+      <p class="pause-diff">${I(D().icon)} 난이도: <b>${D().name}</b> <small>(게임 중에는 바꿀 수 없어요. 다른 난이도는 새 게임으로!)</small></p>
       <button class="big-btn alt" data-p="title">${I('home')} 처음 화면으로</button>
       <p class="note">진행 상황은 웨이브 시작 전 상태로 저장돼요.</p>
     </div>`);
@@ -2071,7 +2045,6 @@
     mb('[data-p=ach]').onclick = openAchievements;
     mb('[data-p=help]').onclick = openHelp;
     mb('[data-p=title]').onclick = () => { closeModal(); goTitle(); };
-    mb('[data-p=diff]').onclick = openDiffChange;
   }
 
   // ================= 입력 =================
@@ -2273,6 +2246,6 @@
   if (window.ResizeObserver) new ResizeObserver(() => resize()).observe(wrap);
 
   // 디버그/테스트용
-  window.__game = { S, World, Profile, openDiffChange, startWave, newGame, submit, pressDigit, useSkill, useUlt, buildWave, openBuild, openTower, openCards, openBook, openAchievements, openMapSelect, waveClear, spawnEnemy, computeMods, forceSave: save, openHeroes, useHero, titleNotices };
+  window.__game = { S, World, Profile, startWave, newGame, submit, pressDigit, useSkill, useUlt, buildWave, openBuild, openTower, openCards, openBook, openAchievements, openMapSelect, waveClear, spawnEnemy, computeMods, forceSave: save, openHeroes, useHero, titleNotices };
   window.__gameReady = true; // index.html의 안전장치가 '게임이 잘 시작됨'을 알 수 있게
 })();
