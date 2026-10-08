@@ -5,7 +5,7 @@
   'use strict';
   Icons.mount();
   const I = Icons.html;
-  const { TOWERS, LV_DMG, LV_RATE, LV_RANGE, ENEMIES, ROLES, DEX_ENEMIES, BOSS_ORDER, FINAL_WAVE, HERO, DIFFS, MAPS, MAP_ORDER, CARDS, RARITY, ACH, TIERS, UPGRADES } = GD;
+  const { SCORE, TOWERS, LV_DMG, LV_RATE, LV_RANGE, ENEMIES, ROLES, DEX_ENEMIES, BOSS_ORDER, FINAL_WAVE, HERO, DIFFS, MAPS, MAP_ORDER, CARDS, RARITY, ACH, TIERS, UPGRADES } = GD;
 
   const SOUND_KEY = 'gugudan-defense-muted';
   const CROSS_TIME = 24;          // 첫 맵 기준, 1웨이브 병사가 길 끝까지 가는 시간(초)
@@ -246,9 +246,37 @@
     if (e.exhausted) return;
     e.exhausted = true;
   }
+  // ================= 점수 (랭킹) =================
+  function baseScore(e) { const d = e.def; return d.final ? SCORE.base.final : d.boss ? SCORE.base.boss : (SCORE.base[d.role || e.type] || 100); }
+  // how: 'answer'(정답) / 'shield'(방패만 깸) / 'assist'(필살기·연쇄 번개)
+  function scoreFor(e, how, combo, finisher) {
+    let v = baseScore(e) * SCORE.waveMul(S.wave) * (MAPD().scoreMul || 1);
+    if (how === 'assist') v *= SCORE.assist;
+    else {
+      v *= SCORE.comboMul(combo || 0);
+      if (finisher) v *= SCORE.finisher;
+      if (how === 'shield') v *= SCORE.shield;
+    }
+    return Math.round(v);
+  }
+  function addScore(n, x, y, z) {
+    if (!(n > 0)) return;
+    S.score += n;
+    if (S.ws) S.ws.score = (S.ws.score || 0) + n;
+    if (x != null) floater(x, y, z, `★${n.toLocaleString('ko-KR')}`, '#ffffff', 15);
+    updateScore();
+  }
+  function updateScore() {
+    const el = $('scoreBox');
+    if (el) el.innerHTML = `<small>점수</small><b>${(S.score || 0).toLocaleString('ko-KR')}</b>`;
+  }
+
   function kill(e) {
     if (e.dead) return;
     e.dead = true;
+    // 정답으로 쓰러뜨리면 그때 콤보·막타 기준, 필살기·연쇄 번개는 절반 (콤보 없음)
+    if (e.scoreHow) addScore(scoreFor(e, e.scoreHow, e.scoreCombo, e.scoreFinisher), e.x, World.enemyHeadY(e) + 1.6, e.z);
+    else addScore(scoreFor(e, 'assist'), e.x, World.enemyHeadY(e) + 1.6, e.z);
     const gems = Math.max(1, Math.round(e.def.gems * MOD.gemMul * (e.def.boss ? MOD.bossGem : 1)));
     S.gems += gems;
     S.stats.kills++;
@@ -587,13 +615,16 @@
     flashBox('right');
     addGauge(0.05 * (1 + 0.05 * S.up.hero) * (1 + MOD.heroCharge)); // 정답 약 20개면 가득
     const lethal = last && !shieldBreak;
-    if (lethal) e.doomed = true; // 화살이 꽂힐 때까지 다른 답의 대상이 되지 않음
+    const wasExhausted = e.exhausted, comboAt = S.combo;
+    if (lethal) { e.doomed = true; e.scoreHow = 'answer'; e.scoreCombo = comboAt; e.scoreFinisher = wasExhausted; } // 화살이 꽂힐 때까지 다른 답의 대상이 되지 않음
     else if (shieldBreak) {
+      addScore(scoreFor(e, 'shield', comboAt, false));
       exhaust(e);
       e.hp = Math.min(e.hp, hpFloor(e) + e.maxHp * 0.0001);
       e.q = makeProblem(e.def.boss);
       e.hint = false;
     } else {
+      addScore(Math.round(scoreFor(e, 'answer', comboAt, wasExhausted) * 0.5 / e.def.probs)); // 여러 번 맞혀야 하는 적의 중간 정답
       const per = e.maxHp / e.def.probs;
       e.probsLeft--;
       e.hp = Math.min(e.hp, e.probsLeft * per);
@@ -765,6 +796,8 @@
     S.castleHp = Math.min(max, S.castleHp + Math.round(max * 0.1));
     const stars = ws.dmg === 0 ? 3 : ws.dmg <= max * 0.15 ? 2 : 1;
     if (stars === 3) Profile.perfectWave();
+    const clearScore = Math.round(SCORE.clear(S.wave) * (stars === 3 ? SCORE.perfect : 1) * (MAPD().scoreMul || 1));
+    addScore(clearScore);
     Sound.play('victory');
     World.setGate(false);
     setTimeout(() => Sound.play('gateOpen'), 400);
@@ -779,7 +812,8 @@
     S.ws = null;
     enterPrep();
     if (clearedNow) showClear();
-    else showResults({ wave: clearedWave, stars, bonus, ws });
+    else showResults({ wave: clearedWave, stars, bonus, ws, clearScore });
+    submitScore();
     newMaps.forEach((m, i) => setTimeout(() => announceMap(m), 600 + i * 900));
   }
   // 새 맵이 열렸을 때 크게 알림
@@ -799,6 +833,7 @@
     Sound.play('lose');
     updateControls();
     Profile.record(S.map, S.lowest, S.wave - 1, false);
+    submitScore();
     const sv = loadSave(S.runId);
     $('retryWave').textContent = sv ? sv.wave : S.wave;
     $('goStats').innerHTML =
@@ -827,7 +862,7 @@
       v: 3, id: S.runId, map: S.map, diff: S.diff, lowest: S.lowest, cleared: S.cleared, wave: S.wave, gold: S.gold, gems: S.gems, castleHp: S.castleHp,
       up: S.up, towers: S.towers.map(t => ({ slot: t.slot, type: t.type, lvl: t.lvl, paid: t.paid })),
       cards: S.cards, pendingCards: S.pendingCards, heroGauge: S.heroGauge,
-      stats: S.stats, bestCombo: S.bestCombo, savedAt: Date.now(),
+      stats: S.stats, bestCombo: S.bestCombo, score: S.score || 0, ranked: !!S.ranked, savedAt: Date.now(),
     });
   }
   function loadSave(id) { const d = Account.getRun(id); return d ? upgradeSave(d) : null; }
@@ -857,7 +892,7 @@
     useMap(MAPS[map] ? map : 'forest');
     Object.assign(S, {
       cleared: false, wave: 1, gems: 0, up: emptyUp(), towers: [], cards: [], pendingCards: null,
-      heroGauge: 0, stats: { kills: 0, correct: 0, wrong: 0 }, bestCombo: 0,
+      heroGauge: 0, stats: { kills: 0, correct: 0, wrong: 0 }, bestCombo: 0, score: 0, ranked: true,
     });
     computeMods();
     S.gold = D().startGold;
@@ -876,6 +911,7 @@
       cleared: !!d.cleared, wave: d.wave, gold: d.gold, gems: d.gems,
       up: Object.assign(emptyUp(), d.up), towers: [], cards: d.cards || [], pendingCards: d.pendingCards || null,
       heroGauge: d.heroGauge || 0, stats: d.stats || { kills: 0, correct: 0, wrong: 0 }, bestCombo: d.bestCombo || 0,
+      score: d.score || 0, ranked: !!d.ranked, // 랭크제 이후에 시작한 판만 랭킹에 들어감
     });
     computeMods();
     (d.towers || []).forEach(t => {
@@ -1069,6 +1105,7 @@
   const skillBtns = [...document.querySelectorAll('.skill')];
   let lastHud = '';
   function updateHud(force) {
+    if (force) updateScore();
     const max = castleMax();
     const g = Math.round(S.heroGauge * 100);
     const key = `${S.castleHp}|${max}|${S.gold}|${S.gems}|${S.wave}|${S.combo}|${S.mode}|${S.enemies.length > 0}|${g}`;
@@ -1520,7 +1557,10 @@
         <span>${I('heart')} 성 피해</span><b>${r.ws.dmg}</b>
         <span>${I('coin')} 정답 골드</span><b class="gold">+${r.ws.gold}</b>
         <span>${I('crown')} 승리 보너스</span><b class="gold">+${r.bonus}</b>
+        <span>${I('star')} 이번 웨이브 점수</span><b class="score">+${((r.ws.score || 0)).toLocaleString('ko-KR')}</b>
+        <span>${I('trophy')} 총 점수</span><b class="score">${(S.score || 0).toLocaleString('ko-KR')}</b>
       </div>
+      <p class="rank-note" id="rankNote">${S.ranked && Account.account ? '랭킹에 기록하는 중…' : !S.ranked ? '예전 저장으로 이어한 판이라 랭킹에는 들어가지 않아요.' : ''}</p>
       <button class="big-btn" id="toCards">${I('card')} 보상 카드 고르기</button>`;
     openModal(`웨이브 ${r.wave} 승리!`, html, { noClose: true });
     for (let i = 0; i < r.stars; i++) setTimeout(() => Sound.play('star', i), 300 + i * 250);
@@ -1632,9 +1672,50 @@
     loadGame(sv, false);
     showBanner(`${I('play')} ${MAPD().name} · 웨이브 ${S.wave}부터 이어하기`, 'good', 1800);
   }
+  // ---------- 점수 보내기 · 랭킹 ----------
+  const fmt = n => Number(n || 0).toLocaleString('ko-KR');
+  function submitScore() {
+    if (!S.ranked || !S.runId || !Account.account) return;
+    const payload = { runId: S.runId, diff: S.lowest, map: S.map, wave: S.wave, score: S.score || 0, cleared: !!S.cleared };
+    Account.submitScore(payload).then(r => {
+      const el = $('rankNote');
+      if (!r || !r.ok) { if (el) el.textContent = r && r.error ? r.error : '랭킹 서버에 연결하지 못했어요. 다음 웨이브에 다시 보내요.'; return; }
+      if (el) el.innerHTML = r.newBest
+        ? `${I('crown')} ${DIFFS[payload.diff].name} 랭킹 <b>${fmt(r.rank)}위</b>! 내 최고 기록이에요`
+        : `${DIFFS[payload.diff].name} 내 최고 ${fmt(r.best)}점 · <b>${fmt(r.rank)}위</b>`;
+    });
+  }
+  function openRanking(diff, scope) {
+    diff = DIFFS[diff] ? diff : (DIFFS[S.lowest] ? S.lowest : 'normal');
+    scope = scope || 'all';
+    const ac = Account.account;
+    hide('title');
+    const head = `<div class="rank-tabs">${Object.keys(DIFFS).map(k => `<button data-rd="${k}" class="${k === diff ? 'on' : ''}">${DIFFS[k].name}</button>`).join('')}</div>
+      <div class="rank-scope"><button data-rs="all" class="${scope === 'all' ? 'on' : ''}">전체</button><button data-rs="school" class="${scope === 'school' ? 'on' : ''}" ${ac ? '' : 'disabled'}>우리 학교</button></div>`;
+    openModal(`${I('crown')} 랭킹`, `${head}<div id="rankBody"><p class="rank-empty">불러오는 중…</p></div>
+      <p class="stat-line" style="margin-top:8px;font-size:12.5px;color:#6b7a88">난이도마다 한 판 최고 점수로 순위를 매겨요. 맵마다 점수 배수가 달라 어느 맵에서 해도 공평해요.</p>`);
+    mball('[data-rd]').forEach(b => b.onclick = () => openRanking(b.dataset.rd, scope));
+    mball('[data-rs]').forEach(b => b.onclick = () => { if (!b.disabled) openRanking(diff, b.dataset.rs); });
+    if (!Account.hasServer) { $('rankBody').innerHTML = '<p class="rank-empty">랭킹은 인터넷 주소로 접속했을 때만 볼 수 있어요.</p>'; return; }
+    Account.getRank(diff, scope === 'school' && ac ? ac.school : '').then(r => {
+      const body = $('rankBody');
+      if (!body) return;
+      if (!r || !r.ok) { body.innerHTML = `<p class="rank-empty">${(r && r.error) || '랭킹을 불러오지 못했어요.'}</p>`; return; }
+      const row = (x, me) => `<div class="rank-row ${me ? 'me' : ''}">
+          <div class="rk ${x.rank <= 3 ? 'm' + x.rank : ''}">${x.rank}</div>
+          <div class="who"><b>${esc(x.nick)}</b><small>${esc(Account.shortSchool(x.schoolName))} · ${esc(x.sido || '')}</small></div>
+          <div class="pts"><b>${fmt(x.score)}점</b><small>${MAPS[x.map] ? I(MAPS[x.map].icon) : ''} ${fmt(x.wave)}웨이브</small></div></div>`;
+      const rows = r.rows || [];
+      let html = rows.length ? `<div class="rank-list">${rows.map(x => row(x, ac && x.accountId === ac.id)).join('')}</div>` : `<p class="rank-empty">아직 ${DIFFS[diff].name} 기록이 없어요. 첫 번째 주인공이 되어 보세요!</p>`;
+      if (r.me && !rows.some(x => ac && x.accountId === ac.id)) html += `<p class="rank-me-sep">⋯</p><div class="rank-list">${row(r.me, true)}</div>`;
+      else if (ac && !r.me) html += `<p class="rank-empty">아직 이 난이도의 내 기록이 없어요.</p>`;
+      body.innerHTML = html;
+    });
+  }
+
   function saveLine(sv) {
     const d = DIFFS[sv.diff] || DIFFS.normal;
-    return `${d.name} · 웨이브 ${sv.wave}${sv.cleared ? ' (무한 모드)' : ''} · 탑 ${(sv.towers || []).length}개`;
+    return `${d.name} · 웨이브 ${sv.wave}${sv.cleared ? ' (무한 모드)' : ''} · ${sv.ranked ? `${fmt(sv.score)}점` : '랭킹 제외(예전 저장)'}`;
   }
   function savedAtText(t) {
     if (!t) return '';
@@ -1972,6 +2053,7 @@
   $('btnContinue').onclick = () => { Sound.init(); autoFull(); openContinue(); };
   $('btnHelp').onclick = openHelp;
   $('btnShare').onclick = openShare;
+  $('btnRank').onclick = () => { Sound.init(); openRanking(); };
   $('btnBook').onclick = () => openBook();
   $('btnAch').onclick = openAchievements;
   $('btnRetry').onclick = () => {

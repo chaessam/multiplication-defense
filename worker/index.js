@@ -4,6 +4,7 @@
 //   · 참여 통계: 참여 플레이어 수(기기 수)와 누적 판 수
 //   · 계정: 학교 + 닉네임 + 숫자 4자리 비밀번호 (10번 틀리면 10분 잠금)
 //   · 저장: 계정마다 최대 20개, 다른 기기에서도 불러오기
+//   · 랭킹: 난이도마다 한 판 최고 점수 (전체 / 우리 학교)
 // - 모든 데이터는 Durable Object(SQLite) 하나에 저장. 무료 플랜에서 쓸 수 있는 방식이에요.
 // - 비밀번호는 그대로 저장하지 않고 PBKDF2로 해시해서 저장해요. 로그인 표시(토큰)도 해시로만 저장해요.
 import { DurableObject } from 'cloudflare:workers';
@@ -20,6 +21,21 @@ const MAX_SAVE_BYTES = 30000;
 const PBKDF2_ITER = 60000;
 const SESSION_DAYS = 365;
 const SCHOOLS_PATH = '/data/schools.json';
+const DIFF_KEYS = ['easy', 'normal', 'hard', 'expert'];
+const MAP_KEYS = ['forest', 'desert', 'snow', 'volcano'];
+const RANK_TOP = 100;
+const RANK_CACHE_MS = 15 * 1000;
+const SCORE_GAP_MS = 2000;             // 같은 판은 이 간격보다 자주 보내지 못함
+const MIN_WAVE_MS = 5000;              // 웨이브 하나는 아무리 빨라도 이보다 오래 걸림
+
+// 웨이브 w까지 나올 수 있는 가장 큰 점수 (js/data.js의 SCORE보다 넉넉하게 잡음)
+// 한 웨이브: 적 40마리 × 트롤 점수(중간 칸 포함 넉넉히 700) + 마지막 보스 10000 + 보스 3마리 × 2000
+//            × 웨이브 배수 × 콤보 최대 2.5 × 막타 1.2 × 맵 최대 1.15, 클리어 보너스 × 1.5 × 1.15
+function maxScore(w) {
+  let sum = 0;
+  for (let i = 1; i <= w; i++) sum += (40 * 700 + 10000 + 3 * 2000) * (1 + 0.1 * i) * 2.5 * 1.2 * 1.15 + 500 * i * 1.5 * 1.15;
+  return Math.ceil(sum);
+}
 
 function json(data, status = 200, extra = {}) {
   return new Response(JSON.stringify(data), {
@@ -99,9 +115,21 @@ export class Stats extends DurableObject {
         map TEXT, diff TEXT, wave INTEGER, saved_at INTEGER, updated INTEGER,
         PRIMARY KEY (account_id, id)
       );
+      CREATE TABLE IF NOT EXISTS runs (
+        account_id INTEGER NOT NULL, run_id TEXT NOT NULL, diff TEXT NOT NULL, map TEXT, score INTEGER NOT NULL DEFAULT 0,
+        wave INTEGER NOT NULL DEFAULT 0, first_wave INTEGER, started INTEGER, last_submit INTEGER,
+        PRIMARY KEY (account_id, run_id)
+      );
+      CREATE TABLE IF NOT EXISTS best (
+        account_id INTEGER NOT NULL, diff TEXT NOT NULL, school TEXT, score INTEGER NOT NULL, wave INTEGER, map TEXT,
+        run_id TEXT, updated INTEGER, PRIMARY KEY (account_id, diff)
+      );
+      CREATE INDEX IF NOT EXISTS best_rank ON best (diff, score DESC);
+      CREATE INDEX IF NOT EXISTS best_school ON best (diff, school, score DESC);
       CREATE TABLE IF NOT EXISTS ip_limits (ip TEXT NOT NULL, kind TEXT NOT NULL, win INTEGER NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (ip, kind, win));
     `);
     this.cache = null;
+    this.rankCache = new Map();
   }
 
   // ---------- 참여 통계 ----------
@@ -226,6 +254,66 @@ export class Stats extends DurableObject {
     return { status: 200, ok: true };
   }
 
+  // ---------- 점수·랭킹 ----------
+  // 웨이브를 넘길 때마다 들어오는 이번 판 점수. 말이 안 되는 점수·속도는 받지 않음
+  submitScore(a, { runId, diff, map, wave, score }) {
+    const now = Date.now();
+    const run = this.sql.exec('SELECT * FROM runs WHERE account_id = ? AND run_id = ?', a.id, runId).toArray()[0];
+    if (run) {
+      if (run.diff !== diff) return { status: 400, error: '점수 정보가 올바르지 않아요.' };
+      if (now - run.last_submit < SCORE_GAP_MS) return { status: 429, error: '잠시 후 다시 보낼게요.' };
+      if (wave > run.first_wave && now - run.started < (wave - run.first_wave) * MIN_WAVE_MS) return { status: 400, error: '점수를 확인할 수 없어 기록하지 않았어요.' };
+      this.sql.exec('UPDATE runs SET score = MAX(score, ?), wave = MAX(wave, ?), map = ?, last_submit = ? WHERE account_id = ? AND run_id = ?', score, wave, map, now, a.id, runId);
+    } else {
+      this.sql.exec('INSERT INTO runs (account_id, run_id, diff, map, score, wave, first_wave, started, last_submit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        a.id, runId, diff, map, score, wave, wave, now, now);
+      // 계정마다 판 기록은 최근 200개만
+      if (Math.random() < 0.05) this.sql.exec(`DELETE FROM runs WHERE account_id = ? AND run_id NOT IN
+        (SELECT run_id FROM runs WHERE account_id = ? ORDER BY last_submit DESC LIMIT 200)`, a.id, a.id);
+    }
+    const best = this.sql.exec('SELECT score FROM best WHERE account_id = ? AND diff = ?', a.id, diff).toArray()[0];
+    let newBest = false;
+    if (!best || score > best.score) {
+      newBest = true;
+      this.sql.exec(`INSERT INTO best (account_id, diff, school, score, wave, map, run_id, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (account_id, diff) DO UPDATE SET school = excluded.school, score = excluded.score, wave = excluded.wave, map = excluded.map, run_id = excluded.run_id, updated = excluded.updated`,
+        a.id, diff, a.school, score, wave, map, runId, now);
+      this.rankCache.clear();
+    }
+    const bestScore = newBest ? score : best.score;
+    return { status: 200, ok: true, newBest, best: bestScore, rank: this.rankOf(diff, bestScore, '') };
+  }
+  rankOf(diff, score, school) {
+    const row = school
+      ? this.sql.exec('SELECT COUNT(*) AS n FROM best WHERE diff = ? AND school = ? AND score > ?', diff, school, score).one()
+      : this.sql.exec('SELECT COUNT(*) AS n FROM best WHERE diff = ? AND score > ?', diff, score).one();
+    return row.n + 1;
+  }
+  rankRow(r, rank) {
+    return { rank, accountId: r.account_id, nick: r.nick, schoolName: r.school_name, sido: r.sido, score: r.score, wave: r.wave, map: r.map };
+  }
+  ranking(diff, school, a) {
+    const key = diff + '|' + school;
+    let top = this.rankCache.get(key);
+    if (!top || Date.now() - top.at > RANK_CACHE_MS) {
+      const sel = `SELECT b.account_id, b.score, b.wave, b.map, c.nick, c.school_name, c.sido FROM best b JOIN accounts c ON c.id = b.account_id`;
+      const list = school
+        ? this.sql.exec(`${sel} WHERE b.diff = ? AND b.school = ? ORDER BY b.score DESC, b.updated ASC LIMIT ${RANK_TOP}`, diff, school).toArray()
+        : this.sql.exec(`${sel} WHERE b.diff = ? ORDER BY b.score DESC, b.updated ASC LIMIT ${RANK_TOP}`, diff).toArray();
+      // 같은 점수는 같은 등수
+      let prev = null, rank = 0;
+      const rows = list.map((r, i) => { if (r.score !== prev) { rank = i + 1; prev = r.score; } return this.rankRow(r, rank); });
+      top = { at: Date.now(), rows };
+      this.rankCache.set(key, top);
+    }
+    let me = null;
+    if (a && (!school || school === a.school)) {
+      const b = this.sql.exec('SELECT score, wave, map FROM best WHERE account_id = ? AND diff = ?', a.id, diff).toArray()[0];
+      if (b) me = this.rankRow({ account_id: a.id, nick: a.nick, school_name: a.school_name, sido: a.sido, score: b.score, wave: b.wave, map: b.map }, this.rankOf(diff, b.score, school));
+    }
+    return { status: 200, rows: top.rows, me };
+  }
+
   // ---------- 요청 처리 (Worker가 넘겨 줌) ----------
   async handle(req) {
     const { op, token, body, ip } = req;
@@ -234,12 +322,14 @@ export class Stats extends DurableObject {
     if (op === 'register') return this.register(body, ip);
     if (op === 'login') return this.login(body, ip);
     if (op === 'logout') return this.logout(token);
+    if (op === 'rank') return this.ranking(body.diff, body.school, token ? await this.accountOf(token) : null);
     const a = await this.accountOf(token);
     if (!a) return { status: 401, error: '다시 로그인해 주세요.', code: 'no_session' };
     if (op === 'me') return { status: 200, account: this.publicAccount(a) };
     if (op === 'saves') return { status: 200, saves: this.listSaves(a.id) };
     if (op === 'putSave') return this.putSave(a.id, body.id, body.data);
     if (op === 'deleteSave') return this.deleteSave(a.id, body.id);
+    if (op === 'score') return this.submitScore(a, body);
     return { status: 404, error: 'not found' };
   }
 }
@@ -293,6 +383,22 @@ export default {
     if (p === '/api/logout' && m === 'POST') return call(env, { op: 'logout', token });
     if (p === '/api/me' && m === 'GET') return call(env, { op: 'me', token });
     if (p === '/api/saves' && m === 'GET') return call(env, { op: 'saves', token });
+    if (p === '/api/score' && m === 'POST') {
+      const b = (await readJson(request)) || {};
+      const runId = String(b.runId || ''), diff = String(b.diff || ''), map = String(b.map || '');
+      const wave = Math.floor(Number(b.wave)), score = Math.floor(Number(b.score));
+      if (!SAVE_ID_RE.test(runId) || !DIFF_KEYS.includes(diff) || !MAP_KEYS.includes(map)
+        || !(wave >= 1 && wave <= 1000) || !(score >= 0) || score > maxScore(wave)) {
+        return json({ error: '점수를 확인할 수 없어 기록하지 않았어요.', code: 'bad_score' }, 400);
+      }
+      return call(env, { op: 'score', token, body: { runId, diff, map, wave, score } });
+    }
+    if (p === '/api/rank' && m === 'GET') {
+      const diff = url.searchParams.get('diff') || '';
+      const school = url.searchParams.get('school') || '';
+      if (!DIFF_KEYS.includes(diff) || (school && !/^[0-9A-Za-z]{1,20}$/.test(school))) return json({ error: 'bad request' }, 400);
+      return call(env, { op: 'rank', token, body: { diff, school } });
+    }
     const sm = p.match(/^\/api\/saves\/([a-z0-9-]+)$/);
     if (sm && SAVE_ID_RE.test(sm[1])) {
       if (m === 'DELETE') return call(env, { op: 'deleteSave', token, body: { id: sm[1] } });

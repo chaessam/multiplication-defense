@@ -202,8 +202,19 @@ const Account = (() => {
     lsDel(OLD_SAVES_KEY); lsDel(OLD_SAVE_KEY);
   }
 
+  // ---------- 점수·랭킹 ----------
+  // 웨이브를 넘길 때마다 이번 판의 점수를 보냄. 서버가 가능한 점수인지 확인하고 난이도별 최고 기록을 남김
+  async function submitScore(run) {
+    if (!hasServer || !session) return { ok: false, local: true };
+    return api('POST', '/api/score', run);
+  }
+  async function getRank(diff, school) {
+    const q = 'diff=' + encodeURIComponent(diff) + (school ? '&school=' + encodeURIComponent(school) : '');
+    return api('GET', '/api/rank?' + q);
+  }
+
   return {
-    hasServer,
+    hasServer, submitScore, getRank,
     get required() { return hasServer; },
     get session() { return session; },
     get account() { return session ? session.account : null; },

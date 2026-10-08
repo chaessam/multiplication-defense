@@ -383,7 +383,7 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
 
 /* 타이틀 */
 .title-card .crest { animation: float 3s ease-in-out infinite; }
-.menu-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.menu-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .mini-btn {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   padding: 8px 4px; font-size: 15px; color: var(--ink);
@@ -698,3 +698,30 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
 .save-row .sv-del { background: #fff; color: #6b5a3e; font-size: 12px !important; }
 .save-row .sv-del.confirm { background: #e5483b; color: #fff; }
 .save-empty, .save-sync { text-align: center; font-size: 14px; color: #6b5a3e; margin: 6px 0; }
+
+/* 점수 · 랭킹 */
+#scoreBox { min-width: 74px; text-align: center; color: #fff; font-size: 12px; line-height: 1.05; text-shadow: 0 2px 0 rgba(0,0,0,.4); }
+#scoreBox small { display: block; color: #9fb4c6; }
+#scoreBox b { display: block; font-weight: 400; font-size: 18px; font-variant-numeric: tabular-nums; }
+.mini-btn.rank { background: linear-gradient(#fff6cf, #ffe27a); }
+.result-rows b.score { color: #2d6fb8; }
+.rank-note { min-height: 18px; margin: 6px 0 2px; font-size: 13px; color: #2d6fb8; text-align: center; }
+.rank-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 8px; }
+.rank-tabs button, .rank-scope button { font-family: inherit; font-size: 14px; padding: 6px 2px; border: 2px solid #13222f; border-radius: 10px; background: #fff; color: #13222f; cursor: pointer; }
+.rank-tabs button { white-space: nowrap; letter-spacing: -0.5px; font-size: 13px; }
+.rank-tabs button.on, .rank-scope button.on { background: #ffd23f; }
+.rank-scope { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 8px; }
+.rank-list { display: flex; flex-direction: column; gap: 5px; }
+.rank-row { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 7px 9px; background: #fff; border: 2px solid #13222f; border-radius: 12px; }
+.rank-row.me { background: #fff3c4; box-shadow: 0 0 0 3px #ffd23f; }
+.rank-row .rk { font-size: 18px; text-align: center; color: #13222f; font-variant-numeric: tabular-nums; }
+.rank-row .rk.m1, .rank-row .rk.m2, .rank-row .rk.m3 { width: 32px; height: 32px; line-height: 32px; border-radius: 50%; color: #13222f; border: 2px solid #13222f; font-size: 16px; justify-self: center; }
+.rank-row .rk.m1 { background: #ffd23f; } .rank-row .rk.m2 { background: #d9e2ea; } .rank-row .rk.m3 { background: #e8a46a; }
+.rank-row .who { min-width: 0; text-align: left; }
+.rank-row .who b { display: block; font-weight: 400; font-size: 16px; color: #13222f; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-row .who small { display: block; font-size: 12px; color: #6b5a3e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-row .pts { text-align: right; font-variant-numeric: tabular-nums; }
+.rank-row .pts b { display: block; font-weight: 400; font-size: 16px; color: #b5361e; }
+.rank-row .pts small { display: block; font-size: 12px; color: #2d6fb8; }
+.rank-me-sep { text-align: center; color: #6b5a3e; font-size: 13px; margin: 4px 0; }
+.rank-empty { text-align: center; font-size: 14px; color: #6b5a3e; margin: 10px 0; }
