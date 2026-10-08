@@ -8,3 +8,4 @@ package-lock.json
 .assetsignore
 .gitignore
 .wrangler
+scripts

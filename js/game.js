@@ -7,8 +7,6 @@
   const I = Icons.html;
   const { TOWERS, LV_DMG, LV_RATE, LV_RANGE, ENEMIES, ROLES, DEX_ENEMIES, BOSS_ORDER, FINAL_WAVE, HERO, DIFFS, MAPS, MAP_ORDER, CARDS, RARITY, ACH, TIERS, UPGRADES } = GD;
 
-  const OLD_SAVE_KEY = 'gugudan-defense-save-v1';
-  const SAVE_KEY = 'gugudan-defense-saves'; // 맵마다 따로 저장: { last, maps: { forest: {...}, ... } }
   const SOUND_KEY = 'gugudan-defense-muted';
   const CROSS_TIME = 24;          // 첫 맵 기준, 1웨이브 병사가 길 끝까지 가는 시간(초)
   const BASE_SPEED = 59.6 / CROSS_TIME; // 월드 단위/초
@@ -801,7 +799,7 @@
     Sound.play('lose');
     updateControls();
     Profile.record(S.map, S.lowest, S.wave - 1, false);
-    const sv = loadSave(S.map);
+    const sv = loadSave(S.runId);
     $('retryWave').textContent = sv ? sv.wave : S.wave;
     $('goStats').innerHTML =
       `${MAPD().name} · ${D().name} · 웨이브 <b>${S.wave}</b>에서 쓰러졌습니다.<br>정답 ${S.stats.correct}개 · 처치 ${S.stats.kills}마리 · 최고 콤보 ${S.bestCombo}`;
@@ -821,46 +819,19 @@
 
   // ================= 저장 / 불러오기 =================
   function lsGet(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
+  // 게임 한 판 = 저장 하나 (js/account.js가 이 기기와 서버에 함께 보관)
   function save() {
     if (S.mode !== 'prep') return;
-    const data = {
-      v: 3, map: S.map, diff: S.diff, lowest: S.lowest, cleared: S.cleared, wave: S.wave, gold: S.gold, gems: S.gems, castleHp: S.castleHp,
+    if (!S.runId) S.runId = Account.newRunId();
+    Account.putRun({
+      v: 3, id: S.runId, map: S.map, diff: S.diff, lowest: S.lowest, cleared: S.cleared, wave: S.wave, gold: S.gold, gems: S.gems, castleHp: S.castleHp,
       up: S.up, towers: S.towers.map(t => ({ slot: t.slot, type: t.type, lvl: t.lvl, paid: t.paid })),
       cards: S.cards, pendingCards: S.pendingCards, heroGauge: S.heroGauge,
       stats: S.stats, bestCombo: S.bestCombo, savedAt: Date.now(),
-    };
-    const all = readSaves();
-    all.maps[S.map] = data;
-    all.last = S.map;
-    writeSaves(all);
+    });
   }
-  function writeSaves(all) {
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(all)); } catch (_) { /* 저장 불가 */ }
-  }
-  function readSaves() {
-    let all = null;
-    try { all = JSON.parse(lsGet(SAVE_KEY)); } catch (_) { all = null; }
-    if (!all || typeof all.maps !== 'object' || !all.maps) all = { last: null, maps: {} };
-    // 예전 버전(저장 칸 1개) → 그 맵의 저장 칸으로 옮기기
-    const old = lsGet(OLD_SAVE_KEY);
-    if (old) {
-      const d = upgradeSave(old);
-      if (d && !all.maps[d.map]) { all.maps[d.map] = d; all.last = all.last || d.map; }
-      writeSaves(all);
-      try { localStorage.removeItem(OLD_SAVE_KEY); } catch (_) { /* 무시 */ }
-    }
-    return all;
-  }
-  // map을 주면 그 맵의 저장, 안 주면 가장 최근에 한 맵의 저장
-  function loadSave(map) {
-    const all = readSaves();
-    const id = map || all.last;
-    return id && all.maps[id] ? upgradeSave(all.maps[id]) : null;
-  }
-  // 저장된 맵 목록 (최근 순)
-  function allSaves() {
-    return MAP_ORDER.map(m => loadSave(m)).filter(Boolean).sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-  }
+  function loadSave(id) { const d = Account.getRun(id); return d ? upgradeSave(d) : null; }
+  function allSaves() { return Account.listRuns().map(upgradeSave).filter(Boolean); }
   function upgradeSave(raw) {
     try {
       const d = typeof raw === 'string' ? JSON.parse(raw) : JSON.parse(JSON.stringify(raw));
@@ -870,7 +841,7 @@
         d.towers = []; d.v = 2;
       }
       if (d.v === 2) { d.map = 'forest'; (d.towers || []).forEach(t => { t.lvl = 1; }); d.cards = []; d.v = 3; }
-      if (d.v === 3) { if (!MAPS[d.map]) d.map = 'forest'; return d; }
+      if (d.v === 3) { if (!MAPS[d.map]) d.map = 'forest'; if (!DIFFS[d.diff]) d.diff = 'normal'; return d; }
     } catch (_) { /* 무시 */ }
     return null;
   }
@@ -881,6 +852,7 @@
   }
   function newGame(diff, map) {
     clearField(true);
+    S.runId = Account.newRunId();
     S.diff = S.lowest = DIFFS[diff] ? diff : 'normal';
     useMap(MAPS[map] ? map : 'forest');
     Object.assign(S, {
@@ -896,6 +868,7 @@
   }
   function loadGame(d, fullHp) {
     clearField(true);
+    S.runId = d.id || Account.newRunId();
     S.diff = DIFFS[d.diff] ? d.diff : 'normal';
     S.lowest = DIFFS[d.lowest] ? d.lowest : S.diff;
     useMap(MAPS[d.map] ? d.map : 'forest');
@@ -1173,14 +1146,119 @@
     setTimeout(() => t.remove(), 4000);
   });
 
+  const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+  // ================= 로그인 (학교 + 닉네임 + 숫자 4자리) =================
+  let lgSchool = null;
+  function lgMsg(text, ok) { $('lgMsg').textContent = text || ''; $('lgMsg').classList.toggle('ok', !!ok); }
+  function lgShowCreate(on) {
+    $('lgPin2Wrap').classList.toggle('hidden', !on);
+    $('lgCreate').classList.toggle('hidden', !on);
+    if (!on) $('lgPin2').value = '';
+  }
+  function lgPickSchool(sc) {
+    lgSchool = sc;
+    $('lgSchool').classList.toggle('hidden', !!sc);
+    $('lgResults').classList.add('hidden');
+    $('lgPicked').classList.toggle('hidden', !sc);
+    if (sc) {
+      $('lgPicked').innerHTML = `<span>${esc(sc.name)}<small>${esc(Account.placeOf(sc))}</small></span><button type="button" id="lgReSchool">바꾸기</button>`;
+      $('lgReSchool').onclick = () => { lgPickSchool(null); $('lgSchool').value = ''; $('lgSchool').focus(); };
+      if (!$('lgNick').value) $('lgNick').focus();
+    }
+    lgShowCreate(false);
+  }
+  function lgSearch() {
+    const q = $('lgSchool').value.trim();
+    const box = $('lgResults');
+    if (!q) { box.classList.add('hidden'); return; }
+    Account.loadSchools().then(() => {
+      if ($('lgSchool').value.trim() !== q) return;
+      const list = Account.searchSchools(q, 30);
+      box.innerHTML = list.length
+        ? list.map((sc, i) => `<button type="button" data-i="${i}">${esc(sc.name)}<small>${esc(Account.placeOf(sc))}</small></button>`).join('')
+        : `<div class="empty">"${esc(q)}"(으)로 찾은 학교가 없어요. 학교 이름을 다시 확인해 주세요.</div>`;
+      box.classList.remove('hidden');
+      box.querySelectorAll('[data-i]').forEach(b => b.onclick = () => lgPickSchool(list[+b.dataset.i]));
+    }).catch(() => lgMsg('학교 목록을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.'));
+  }
+  function lgValues() {
+    const nick = Account.cleanNick($('lgNick').value), pin = $('lgPin').value.trim();
+    if (!lgSchool) { lgMsg('학교를 검색해서 골라 주세요.'); $('lgSchool').focus(); return null; }
+    if (nick.length < 2) { lgMsg('닉네임은 2글자 이상 적어 주세요.'); $('lgNick').focus(); return null; }
+    if (!/^\d{4}$/.test(pin)) { lgMsg('비밀번호는 숫자 4자리예요.'); $('lgPin').focus(); return null; }
+    return { nick, pin };
+  }
+  function lgBusy(on) { $('lgGo').disabled = on; $('lgCreate').disabled = on; }
+  async function lgLogin(ev) {
+    if (ev) ev.preventDefault();
+    Sound.init();
+    const v = lgValues(); if (!v) return;
+    lgBusy(true); lgMsg('확인하는 중…', true);
+    const r = await Account.login(lgSchool.code, v.nick, v.pin);
+    lgBusy(false);
+    if (r.ok) return afterLogin();
+    if (r.code === 'no_account') {
+      lgMsg(`${Account.shortSchool(lgSchool.name)}에 "${v.nick}" 계정이 없어요. 처음이면 비밀번호를 한 번 더 적고 새 계정을 만들어요.`);
+      lgShowCreate(true); $('lgPin2').focus();
+      return;
+    }
+    lgMsg(r.error || '들어가지 못했어요. 다시 해 주세요.');
+    if (r.code === 'wrong_pin') { $('lgPin').value = ''; $('lgPin').focus(); }
+  }
+  async function lgCreate() {
+    Sound.init();
+    const v = lgValues(); if (!v) return;
+    if ($('lgPin2').value.trim() !== v.pin) { lgMsg('두 비밀번호가 달라요. 같은 숫자 4자리를 적어 주세요.'); $('lgPin2').value = ''; $('lgPin2').focus(); return; }
+    await Account.loadProfanity();
+    if (Account.hasProfanity(v.nick)) { lgMsg('사용할 수 없는 말이 들어 있어요. 다른 닉네임을 적어 주세요.'); $('lgNick').focus(); return; }
+    lgBusy(true); lgMsg('계정을 만드는 중…', true);
+    const r = await Account.register(lgSchool.code, v.nick, v.pin);
+    lgBusy(false);
+    if (r.ok) return afterLogin(true);
+    lgMsg(r.error || '계정을 만들지 못했어요. 다시 해 주세요.');
+  }
+  function openLogin() {
+    S.mode = 'title';
+    hide('title');
+    lgMsg(''); lgShowCreate(false);
+    $('lgPin').value = '';
+    show('login');
+    Account.loadSchools().catch(() => {});
+  }
+  function afterLogin(created) {
+    hide('login');
+    $('lgPin').value = ''; $('lgPin2').value = '';
+    lgMsg('');
+    show('title');
+    refreshTitle();
+    showBanner(`${I('star')} ${created ? '새 계정을 만들었어요!' : '어서 와요,'} ${esc(Account.account.nick)}`, 'good', 1800);
+    Account.sync().then(() => refreshTitle());
+  }
+  $('loginForm').addEventListener('submit', lgLogin);
+  $('lgCreate').onclick = lgCreate;
+  $('lgSchool').addEventListener('input', () => { clearTimeout(lgSearch.t); lgSearch.t = setTimeout(lgSearch, 150); });
+  ['lgPin', 'lgPin2'].forEach(id => $(id).addEventListener('input', () => { $(id).value = $(id).value.replace(/\D/g, '').slice(0, 4); }));
+  $('lgNick').addEventListener('input', () => lgShowCreate(false));
+
   function refreshTitle() {
     const saves = allSaves(), sv = saves[0];
     const btn = $('btnContinue');
     if (sv) {
       btn.classList.remove('hidden');
       const dd = DIFFS[sv.diff] || DIFFS.normal, mm = MAPS[sv.map] || MAPS.forest;
-      $('continueInfo').textContent = saves.length > 1 ? `저장된 맵 ${saves.length}개` : `${mm.name} · ${dd.name} · 웨이브 ${sv.wave}`;
+      $('continueInfo').textContent = saves.length > 1 ? `저장 ${saves.length}개 · 최근 ${mm.name} ${dd.name} ${sv.wave}웨이브` : `${mm.name} · ${dd.name} · 웨이브 ${sv.wave}`;
     } else btn.classList.add('hidden');
+    const ac = Account.account;
+    $('acctBar').classList.toggle('hidden', !ac);
+    if (ac) {
+      $('acctBar').innerHTML = `${I('home')} <span>${esc(Account.shortSchool(ac.schoolName))} · <b>${esc(ac.nick)}</b></span><button id="btnLogout" type="button">로그아웃</button>`;
+      $('btnLogout').onclick = () => {
+        const b = $('btnLogout');
+        if (!b.classList.contains('confirm')) { b.classList.add('confirm'); b.textContent = '정말 로그아웃?'; return; }
+        Account.logout().then(() => { hide('title'); openLogin(); });
+      };
+    }
     const stars = MAP_ORDER.reduce((s, m) => s + Profile.bestStars(m), 0);
     const open = MAP_ORDER.filter(m => Profile.unlocked(m)).length;
     loadPlayerStats();
@@ -1296,6 +1374,7 @@
   }, true);
   function openModal(title, html, opts = {}) {
     modalOpenedAt = performance.now();
+    delete $('modalTitle').dataset.kind;
     $('modalTitle').innerHTML = title;
     $('modalBody').innerHTML = html;
     $('modalClose').classList.toggle('hidden', !!opts.noClose);
@@ -1523,15 +1602,13 @@
     x.fillStyle = '#d9493c'; x.beginPath(); x.moveTo(cx - 3, cy); x.lineTo(cx + 8, cy - 12); x.lineTo(cx + 19, cy); x.fill();
   }
   function openMapSelect(diff) {
-    const saved = {};
-    MAP_ORDER.forEach(m => { const d = loadSave(m); if (d && DIFFS[d.diff]) saved[m] = d; });
     const html = `<div class="maps">${MAP_ORDER.map(id => {
       const m = MAPS[id], ok = Profile.unlocked(id), rec = Profile.rec(id, diff);
       return `<button class="mapc ${ok ? '' : 'locked'}" data-map="${id}" ${ok ? '' : 'disabled'}>
         <canvas width="240" height="120" data-prev="${id}"></canvas>
         <div class="info"><b>${I(m.icon)} ${m.name}</b><small>${m.desc}</small>
           ${starsHtml(Profile.stars(id, diff))}<small>${rec.cleared ? '클리어!' : rec.best ? `최고 웨이브 ${rec.best}` : '도전 전'}</small>
-          ${ok && saved[id] ? `<span class="saved-tag">${I('play')} 저장됨 · ${DIFFS[saved[id].diff].name} ${saved[id].wave}웨이브</span>` : ''}</div>
+</div>
         ${ok ? '' : `<div class="lockv">${I('lock')}<b>${m.name}</b>${MAPS[m.unlock].name}에서<br>10웨이브를 넘기면 열려요</div>`}
       </button>`;
     }).join('')}</div>
@@ -1540,9 +1617,7 @@
     mball('canvas[data-prev]').forEach(cv => drawMapPreview(cv, cv.dataset.prev));
     mball('[data-map]').forEach(b => b.onclick = () => {
       if (b.disabled) return;
-      const id = b.dataset.map;
-      if (saved[id]) openSlotChoice(saved[id], diff);
-      else startNew(diff, id);
+      startNew(diff, b.dataset.map);
     });
   }
   function startNew(diff, map) {
@@ -1561,32 +1636,41 @@
     const d = DIFFS[sv.diff] || DIFFS.normal;
     return `${d.name} · 웨이브 ${sv.wave}${sv.cleared ? ' (무한 모드)' : ''} · 탑 ${(sv.towers || []).length}개`;
   }
-  // 저장이 있는 맵을 고르면: 이어하기 / 처음부터
-  function openSlotChoice(sv, diff) {
-    const m = MAPS[sv.map];
-    openModal(`${I(m.icon)} ${m.name}`, `<div class="opt-list">
-      <button class="opt evolve" data-slot="cont"><span class="icon">${I('play')}</span>
-        <span class="info"><b>이어하기</b><small>${saveLine(sv)}</small></span></button>
-      <button class="opt" data-slot="new"><span class="icon">${I(DIFFS[diff].icon)}</span>
-        <span class="info"><b>처음부터 (${DIFFS[diff].name})</b><small>이 맵의 저장만 지워져요. 다른 맵 저장은 그대로예요.</small></span></button>
-    </div>`);
-    mb('[data-slot=cont]').onclick = () => continueSave(sv);
-    mb('[data-slot=new]').onclick = () => {
-      if (!confirm(`${m.name}의 저장(웨이브 ${sv.wave})이 지워져요. 처음부터 할까요?`)) return;
-      startNew(diff, sv.map);
-    };
+  function savedAtText(t) {
+    if (!t) return '';
+    const d = new Date(t), now = new Date();
+    const hm = d.toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' });
+    if (d.toDateString() === now.toDateString()) return `오늘 ${hm}`;
+    const y = new Date(now); y.setDate(now.getDate() - 1);
+    if (d.toDateString() === y.toDateString()) return `어제 ${hm}`;
+    return `${d.getMonth() + 1}월 ${d.getDate()}일 ${hm}`;
   }
-  // 처음 화면 '이어하기': 저장이 여러 맵이면 고르기
+  // 저장 목록: 게임 한 판마다 하나, 최근 순. 다른 기기에서 한 것도 서버에서 불러옴
   function openContinue() {
-    const saves = allSaves();
-    if (!saves.length) return;
-    if (saves.length === 1) { continueSave(saves[0]); return; }
     hide('title');
-    openModal(`${I('play')} 이어하기`, `<div class="opt-list">${saves.map(sv => `
-      <button class="opt" data-cont="${sv.map}"><span class="icon">${I(MAPS[sv.map].icon)}</span>
-        <span class="info"><b>${MAPS[sv.map].name}</b><small>${saveLine(sv)}</small></span></button>`).join('')}</div>
-      <p class="stat-line" style="margin-top:10px;font-size:13px;color:#6b7a88">맵마다 따로 저장돼요. 새 맵을 시작해도 다른 맵 저장은 지워지지 않아요.</p>`);
-    mball('[data-cont]').forEach(b => b.onclick = () => continueSave(loadSave(b.dataset.cont)));
+    const render = (note) => {
+      const saves = allSaves();
+      const rows = saves.map(sv => `
+        <div class="save-row" data-id="${sv.id}">
+          <div class="sv-ic">${I(MAPS[sv.map].icon)}</div>
+          <div class="sv-main"><b>${MAPS[sv.map].name}</b><small>${saveLine(sv)}</small><small class="sv-time">${I('scroll')} ${savedAtText(sv.savedAt)}</small></div>
+          <div class="sv-btns"><button class="sv-go" data-go="${sv.id}">이어하기</button><button class="sv-del" data-del="${sv.id}">지우기</button></div>
+        </div>`).join('');
+      const html = `${note ? `<p class="save-sync">${note}</p>` : ''}
+        ${saves.length ? `<div class="save-list">${rows}</div>` : `<p class="save-empty">아직 저장된 게임이 없어요. <b>새 게임</b>을 시작하면 웨이브마다 자동으로 저장돼요.</p>`}
+        <p class="stat-line" style="margin-top:10px;font-size:13px;color:#6b7a88">게임 한 판마다 따로 저장돼요 (최대 20개).${Account.account ? ' 다른 기기에서도 같은 계정으로 로그인하면 이어할 수 있어요.' : ''}</p>`;
+      if (modalOpen && $('modalTitle').dataset.kind === 'saves') $('modalBody').innerHTML = html;
+      else { openModal(`${I('play')} 저장된 게임`, html); $('modalTitle').dataset.kind = 'saves'; }
+      mball('[data-go]').forEach(b => b.onclick = () => { const sv = loadSave(b.dataset.go); if (sv) continueSave(sv); });
+      mball('[data-del]').forEach(b => b.onclick = () => {
+        if (!b.classList.contains('confirm')) { b.classList.add('confirm'); b.textContent = '정말 지울까요?'; return; }
+        Account.deleteRun(b.dataset.del);
+        render('');
+        refreshTitle();
+      });
+    };
+    render(Account.account ? '다른 기기의 저장을 확인하는 중…' : '');
+    if (Account.account) Account.sync().then(r => { if (modalOpen && $('modalTitle').dataset.kind === 'saves') render(r && r.offline ? '서버에 연결하지 못해 이 기기의 저장만 보여요.' : ''); refreshTitle(); });
   }
 
   // 게임 중 난이도 바꾸기 (일시정지 메뉴)
@@ -1891,7 +1975,7 @@
   $('btnBook').onclick = () => openBook();
   $('btnAch').onclick = openAchievements;
   $('btnRetry').onclick = () => {
-    const sv = loadSave(S.map);
+    const sv = loadSave(S.runId);
     beginPlay();
     if (sv) loadGame(sv, true); else newGame(S.diff, S.map);
   };
@@ -1934,17 +2018,21 @@
   // ================= 시작 =================
   try { if (lsGet(SOUND_KEY) === '1') Sound.setMuted(true); } catch (_) { /* 무시 */ }
   soundIcon();
-  const sv0 = loadSave();
+  if (!Account.hasServer) Account.migrateOldSaves(); // 파일로 연 경우(서버 없음): 로그인 없이 이 기기에만 저장
+  const sv0 = allSaves()[0];
   World.loadMap(sv0 && MAPS[sv0.map] ? sv0.map : 'forest');
   S.map = World.mapId;
   resize();
   World.setTitleCam(true);
   refreshTitle();
+  // 로그인해야만 플레이: 이 기기에 로그인 표시가 없으면 로그인 화면부터
+  if (Account.required && !Account.session) openLogin();
+  else if (Account.required) Account.verify().then(ok => { if (!ok) openLogin(); else Account.sync().then(() => refreshTitle()); });
   updateControls();
   requestAnimationFrame(frame);
   if (window.ResizeObserver) new ResizeObserver(() => resize()).observe(wrap);
 
   // 디버그/테스트용
-  window.__game = { S, World, Profile, openDiffChange, startWave, newGame, submit, pressDigit, useSkill, useUlt, buildWave, openBuild, openTower, openCards, openBook, openAchievements, openMapSelect, waveClear, spawnEnemy, computeMods };
+  window.__game = { S, World, Profile, openDiffChange, startWave, newGame, submit, pressDigit, useSkill, useUlt, buildWave, openBuild, openTower, openCards, openBook, openAchievements, openMapSelect, waveClear, spawnEnemy, computeMods, forceSave: save };
   window.__gameReady = true; // index.html의 안전장치가 '게임이 잘 시작됨'을 알 수 있게
 })();

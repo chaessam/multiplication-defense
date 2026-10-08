@@ -77,8 +77,43 @@
   </div>
 
   <!-- 타이틀 -->
+  <!-- 로그인: 학교 + 닉네임 + 숫자 4자리 비밀번호 -->
+  <div id="login" class="screen hidden">
+    <div class="parchment login-card">
+      <div class="crest" data-icon="castle"></div>
+      <h1>구구단 디펜스</h1>
+      <p class="sub">학교와 닉네임으로 들어가요</p>
+      <form id="loginForm" class="login-form" autocomplete="off" novalidate>
+        <label for="lgSchool">학교</label>
+        <div class="school-pick">
+          <input id="lgSchool" type="search" placeholder="학교 이름 검색 (예: 송우초)" autocomplete="off">
+          <div id="lgPicked" class="school-picked hidden"></div>
+          <div id="lgResults" class="school-results hidden" role="listbox"></div>
+        </div>
+        <label for="lgNick">닉네임</label>
+        <input id="lgNick" maxlength="10" placeholder="2~10자 별명" autocomplete="off">
+        <label for="lgPin">비밀번호 <small>숫자 4자리</small></label>
+        <input id="lgPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••" autocomplete="off">
+        <div id="lgPin2Wrap" class="hidden">
+          <label for="lgPin2">비밀번호 한 번 더 <small>새 계정 만들기</small></label>
+          <input id="lgPin2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••" autocomplete="off">
+        </div>
+        <p id="lgMsg" class="lg-msg" role="status"></p>
+        <button class="big-btn" id="lgGo" type="submit"><span data-icon="play"></span> 들어가기</button>
+        <button class="big-btn alt hidden" id="lgCreate" type="button"><span data-icon="star"></span> 새 계정 만들기</button>
+      </form>
+      <ul class="lg-notes">
+        <li>처음이면 학교·닉네임·비밀번호를 정하고 <b>들어가기</b>를 눌러요. 새 계정을 만들 수 있어요.</li>
+        <li>닉네임은 실명 대신 <b>별명</b>으로 적어 주세요.</li>
+        <li>비밀번호를 잊으면 찾을 수 없어요. 새 닉네임으로 다시 만들어야 해요.</li>
+        <li>이 기기에서는 다음부터 자동으로 들어가지고, 다른 기기에서도 로그인하면 저장을 불러올 수 있어요.</li>
+      </ul>
+    </div>
+  </div>
+
   <div id="title" class="screen">
     <div class="parchment title-card">
+      <div id="acctBar" class="acct-bar hidden"></div>
       <div class="crest" data-icon="castle"></div>
       <h1>구구단 디펜스</h1>
       <p class="sub">Multiplication Defense</p>
@@ -206,6 +241,7 @@
   <script src="js/icons.js"></script>
   <script src="js/data.js"></script>
   <script src="js/profile.js"></script>
+  <script src="js/account.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/models.js"></script>
   <script src="js/world.js"></script>
