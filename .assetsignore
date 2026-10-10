@@ -9,3 +9,5 @@ package-lock.json
 .gitignore
 .wrangler
 scripts
+.claude
+CLAUDE.md
