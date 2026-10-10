@@ -1492,7 +1492,10 @@
   function showPlayerStats(d) {
     if (!d || !(d.players >= 0)) return;
     const n = v => Number(v).toLocaleString('ko-KR');
-    $('playerStats').innerHTML = `${I('hero')} 참여 플레이어 <b>${n(d.players)}명</b> · 누적 <b>${n(d.games)}판</b>`;
+    const parts = [];
+    if (d.schools >= 0) parts.push(`${I('home')} 참여 학교 <b>${n(d.schools)}곳</b>`);
+    parts.push(`${I('hero')} 플레이어 <b>${n(d.players)}명</b>`, `누적 <b>${n(d.games)}판</b>`);
+    $('playerStats').innerHTML = parts.map(x => `<span>${x}</span>`).join(' · ');
     $('playerStats').classList.remove('hidden');
   }
   async function loadPlayerStats() {

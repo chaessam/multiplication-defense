@@ -635,8 +635,9 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
 .maker-link:hover, .maker-link:focus-visible { color: #13222f; border-bottom-color: #13222f; outline: none; }
 
 /* 참여 플레이어 수 */
-.player-stats { margin: 6px 0 0; font-size: 14px; white-space: nowrap; color: #13222f; background: rgba(255,210,63,.28); border-radius: 10px; padding: 3px 10px; text-align: center; }
+.player-stats { margin: 6px 0 0; font-size: 14px; word-break: keep-all; color: #13222f; background: rgba(255,210,63,.28); border-radius: 10px; padding: 3px 10px; text-align: center; }
 .player-stats b { font-weight: 400; color: #b5361e; }
+.player-stats span { white-space: nowrap; }
 .player-stats.hidden { display: none; }
 
 /* QR 공유 */

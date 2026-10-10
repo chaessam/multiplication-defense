@@ -1,7 +1,7 @@
 // 구구단 디펜스 Cloudflare 서버
 // - 게임 화면 파일(index.html, js, css …)은 Cloudflare가 바로 제공 (assets)
 // - /api/* 만 이 Worker가 처리
-//   · 참여 통계: 참여 플레이어 수(기기 수)와 누적 판 수
+//   · 참여 통계: 참여 학교 수, 참여 플레이어 수(기기 수), 누적 판 수
 //   · 계정: 학교 + 닉네임 + 숫자 4자리 비밀번호 (10번 틀리면 10분 잠금)
 //   · 저장: 계정마다 최대 20개, 다른 기기에서도 불러오기
 //   · 랭킹: 난이도마다 한 판 최고 점수 (전체 / 우리 학교)
@@ -159,7 +159,9 @@ export class Stats extends DurableObject {
   }
   stats() {
     if (this.cache && Date.now() - this.cache.at < STATS_CACHE_MS) return this.cache.data;
-    const data = { players: this.counter('players'), games: this.counter('games') };
+    // 참여 학교: 계정이 하나라도 있는 학교 수
+    const schools = this.sql.exec('SELECT COUNT(DISTINCT school) AS n FROM accounts').one().n;
+    const data = { players: this.counter('players'), games: this.counter('games'), schools };
     this.cache = { at: Date.now(), data };
     return data;
   }
