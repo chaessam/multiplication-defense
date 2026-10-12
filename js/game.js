@@ -1298,8 +1298,35 @@
     $('lgPin').value = '';
     show('login');
     Account.loadSchools().catch(() => {});
+    Account.ping();
+  }
+  // ================= 서버가 멈췄을 때 안내 (클라우드플레어 무료 한도 초과 등) =================
+  // 게임 화면 파일은 그대로 열리므로, 로그인한 학생은 계속 하고 로그인 못 한 학생은 연습 모드로 할 수 있게
+  let practice = false;
+  function showDown(down) {
+    const when = Account.resetText();
+    $('lgDown').classList.toggle('hidden', !down);
+    $('downBar').classList.toggle('hidden', !down);
+    if (!down) return;
+    $('lgDown').innerHTML = `<b>${I('wrench')} 서버가 잠시 쉬고 있어요</b>
+      <p>오늘 접속한 친구가 아주 많아서 서버가 잠시 멈췄어요. <b>${when}</b> 다시 정상으로 작동해요.<br>지금은 로그인을 할 수 없어요. 로그인 없이 연습할 수 있어요 (연습한 판은 이 기기에 저장되고, 다음에 로그인하면 내 계정으로 옮겨져요. 랭킹에는 그때부터 들어가요).</p>
+      <button class="big-btn alt" id="lgPractice" type="button">${I('play')} 로그인 없이 연습하기</button>`;
+    $('lgPractice').onclick = startPractice;
+    $('downBar').innerHTML = `<b>${I('wrench')} 서버가 잠시 쉬고 있어요 · ${when} 정상 작동</b>
+      <p>게임은 그대로 할 수 있어요. 저장은 이 기기에 해 두었다가 서버가 돌아오면 자동으로 올라가요. 랭킹 · 다른 기기에서 불러오기는 그때부터 돼요.</p>`;
+  }
+  Account.onDown(showDown);
+  function startPractice() {
+    Sound.init();
+    practice = true;
+    hide('login');
+    Profile.useOwner('guest');
+    show('title');
+    refreshTitle();
+    showBanner(`${I('play')} 연습 모드 — 이 기기에만 저장돼요`, 'good', 2000);
   }
   function afterLogin(created) {
+    practice = false;
     hide('login');
     $('lgPin').value = ''; $('lgPin2').value = '';
     lgMsg('');
@@ -1328,7 +1355,11 @@
       $('continueInfo').textContent = saves.length > 1 ? `저장 ${saves.length}개 · 최근 ${mm.name} ${dd.name} ${sv.wave}웨이브` : `${mm.name} · ${dd.name} · 웨이브 ${sv.wave}`;
     } else btn.classList.add('hidden');
     const ac = Account.account;
-    $('acctBar').classList.toggle('hidden', !ac);
+    $('acctBar').classList.toggle('hidden', !ac && !practice);
+    if (!ac && practice) {
+      $('acctBar').innerHTML = `${I('play')} <span><b>연습 모드</b> · 이 기기에만 저장</span><button id="btnLogout" type="button">로그인</button>`;
+      $('btnLogout').onclick = () => { practice = false; hide('title'); openLogin(); };
+    }
     if (ac) {
       $('acctBar').innerHTML = `${I('home')} <span>${esc(Account.shortSchool(ac.schoolName))} · <b>${esc(ac.nick)}</b></span><button id="btnLogout" type="button">로그아웃</button>`;
       $('btnLogout').onclick = () => {

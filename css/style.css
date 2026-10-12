@@ -796,3 +796,11 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
 .pause-diff b { font-weight: 400; color: #c0392b; }
 .pause-diff small { display: block; font-size: 12px; color: #6b7a88; word-break: keep-all; }
 .pause-diff .ic { width: 1.1em; height: 1.1em; vertical-align: -3px; }
+
+/* 서버가 멈췄을 때 안내 (로그인 화면 · 처음 화면) */
+.down-box { margin: 8px 0 10px; padding: 10px 12px; text-align: left; color: #13222f; background: #fff4d6; border: 2px solid #e8a21f; border-radius: 14px; word-break: keep-all; }
+.down-box > b { display: block; font-weight: 400; font-size: 16.5px; color: #b5361e; }
+.down-box > b .ic { width: 1.1em; height: 1.1em; vertical-align: -3px; }
+.down-box p { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: #4a5a68; }
+.down-box p b { color: #b5361e; font-weight: 400; }
+.down-box .big-btn { margin-top: 8px; font-size: 17px; }
