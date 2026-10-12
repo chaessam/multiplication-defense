@@ -254,22 +254,26 @@ const Sound = (() => {
   // ---------------- 외부 음원 파일 (있으면 사용) ----------------
   const files = { bgm: null, sfx: {}, cur: null, curName: '' };
   const BGM_NAMES = { title: 'bgm_title', prep: 'bgm_prep', battle: 'bgm_battle', boss: 'bgm_boss' };
-  async function fetchBuf(name) {
-    for (const ext of ['mp3', 'ogg', 'wav']) {
-      try {
-        const r = await fetch(`audio/${name}.${ext}`);
-        if (!r.ok) continue;
-        return await ac.decodeAudioData(await r.arrayBuffer());
-      } catch (_) { /* 파일 없음 */ }
-    }
-    return null;
+  // 음원 파일은 audio/files.json에 적힌 것만 받음 (없는 파일을 하나하나 찾아보면 '없음' 요청이 판마다 100개 넘게 생겨서)
+  //   예: { "files": ["bgm_battle.mp3", "victory.ogg"] }
+  async function fetchBuf(file) {
+    try {
+      const r = await fetch(`audio/${file}`);
+      if (!r.ok) return null;
+      return await ac.decodeAudioData(await r.arrayBuffer());
+    } catch (_) { return null; }
   }
   async function loadFiles() {
     if (location.protocol === 'file:') return;
+    let list = [];
+    try { const r = await fetch('audio/files.json'); if (r.ok) list = (await r.json()).files || []; } catch (_) { list = []; }
+    if (!list.length) return;
+    const byName = {};
+    list.forEach(f => { const m = /^([a-z0-9_]+)\.(mp3|ogg|wav)$/i.exec(f); if (m && !byName[m[1]]) byName[m[1]] = f; });
     const bgm = {};
-    for (const [k, n] of Object.entries(BGM_NAMES)) { const b = await fetchBuf(n); if (b) bgm[k] = b; }
+    for (const [k, n] of Object.entries(BGM_NAMES)) { if (byName[n]) { const b = await fetchBuf(byName[n]); if (b) bgm[k] = b; } }
     if (Object.keys(bgm).length) { files.bgm = bgm; switchFileTrack(); }
-    for (const n of Object.keys(sfx)) { const b = await fetchBuf(n); if (b) files.sfx[n] = b; }
+    for (const n of Object.keys(sfx)) { if (byName[n]) { const b = await fetchBuf(byName[n]); if (b) files.sfx[n] = b; } }
   }
   function fileMusic() { return true; }
   function switchFileTrack() {
