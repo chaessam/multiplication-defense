@@ -7,6 +7,8 @@
 //   · 랭킹: 난이도마다 한 판 최고 점수 (전체 / 우리 학교)
 //   · 플레이 기록: 열린 맵·영웅·업적·도감을 계정에 두어 다른 기기에서도 이어짐
 // - 모든 데이터는 Durable Object(SQLite) 하나에 저장. 무료 플랜에서 쓸 수 있는 방식이에요.
+// - 무료 플랜은 하루에 읽을 수 있는 행 수(500만)가 정해져 있어서, 요청마다 표 전체를 훑는 쿼리는 쓰지 않아요.
+//   (학교 수는 계정을 만들 때 세어 두고, 순위는 메모리에 올려 둔 랭킹표로 계산)
 // - 비밀번호는 그대로 저장하지 않고 PBKDF2로 해시해서 저장해요. 로그인 표시(토큰)도 해시로만 저장해요.
 import { DurableObject } from 'cloudflare:workers';
 import PROFANITY from '../data/profanity.json';
@@ -25,9 +27,11 @@ const SCHOOLS_PATH = '/data/schools.json';
 const DIFF_KEYS = ['easy', 'normal', 'hard', 'expert'];
 const MAP_KEYS = ['forest', 'desert', 'snow', 'volcano'];
 const RANK_TOP = 100;
-const RANK_CACHE_MS = 15 * 1000;
 const SCORE_GAP_MS = 2000;             // 같은 판은 이 간격보다 자주 보내지 못함
 const MIN_WAVE_MS = 5000;              // 웨이브 하나는 아무리 빨라도 이보다 오래 걸림
+
+// 랭킹 순서: 점수 높은 순, 같으면 먼저 기록한 사람이 위
+const lbCmp = (x, y) => (y.score - x.score) || (x.updated - y.updated);
 
 // 웨이브 w까지 나올 수 있는 가장 큰 점수 (js/data.js의 SCORE보다 넉넉하게 잡음)
 // 한 웨이브: 적 40마리 × 트롤 점수(중간 칸 포함 넉넉히 700) + 마지막 보스 10000 + 보스 3마리 × 2000
@@ -146,7 +150,8 @@ export class Stats extends DurableObject {
       CREATE TABLE IF NOT EXISTS ip_limits (ip TEXT NOT NULL, kind TEXT NOT NULL, win INTEGER NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (ip, kind, win));
     `);
     this.cache = null;
-    this.rankCache = new Map();
+    this.lb = null;            // 메모리 랭킹표 (처음 쓸 때 만듦)
+    this.schoolsReady = false;
   }
 
   // ---------- 참여 통계 ----------
@@ -157,11 +162,19 @@ export class Stats extends DurableObject {
   bump(name, by = 1) {
     this.sql.exec('INSERT INTO counters (name, value) VALUES (?, ?) ON CONFLICT (name) DO UPDATE SET value = value + excluded.value', name, by);
   }
+  // 참여 학교 수(계정이 하나라도 있는 학교)는 계정을 만들 때 세어 둠. 처음 한 번만 표를 훑어서 시작값을 만듦
+  ensureSchools() {
+    if (this.schoolsReady) return;
+    if (!this.sql.exec("SELECT 1 FROM counters WHERE name = 'schools'").toArray().length) {
+      const n = this.sql.exec('SELECT COUNT(DISTINCT school) AS n FROM accounts').one().n;
+      this.sql.exec("INSERT INTO counters (name, value) VALUES ('schools', ?)", n);
+    }
+    this.schoolsReady = true;
+  }
   stats() {
     if (this.cache && Date.now() - this.cache.at < STATS_CACHE_MS) return this.cache.data;
-    // 참여 학교: 계정이 하나라도 있는 학교 수
-    const schools = this.sql.exec('SELECT COUNT(DISTINCT school) AS n FROM accounts').one().n;
-    const data = { players: this.counter('players'), games: this.counter('games'), schools };
+    this.ensureSchools();
+    const data = { players: this.counter('players'), games: this.counter('games'), schools: this.counter('schools') };
     this.cache = { at: Date.now(), data };
     return data;
   }
@@ -175,8 +188,7 @@ export class Stats extends DurableObject {
       this.sql.exec('UPDATE devices SET games = games + 1, last = ? WHERE id = ?', now, id);
       this.bump('games');
     }
-    this.cache = null;
-    return this.stats();
+    return this.stats(); // 30초 캐시 (판을 시작할 때마다 통계를 다시 읽지 않음)
   }
 
   // ---------- IP별 횟수 제한 (한 교실이 같은 IP를 쓰므로 넉넉하게) ----------
@@ -208,7 +220,7 @@ export class Stats extends DurableObject {
     if (!s || Date.now() - s.last > SESSION_DAYS * 864e5) return null;
     const a = this.sql.exec('SELECT * FROM accounts WHERE id = ?', s.account_id).toArray()[0];
     if (!a) return null;
-    this.sql.exec('UPDATE sessions SET last = ? WHERE token_hash = ?', Date.now(), th);
+    if (Date.now() - s.last > 6 * 36e5) this.sql.exec('UPDATE sessions SET last = ? WHERE token_hash = ?', Date.now(), th);
     return a;
   }
   async register({ school, nick, pin }, ip) {
@@ -217,11 +229,14 @@ export class Stats extends DurableObject {
     if (this.sql.exec('SELECT 1 FROM accounts WHERE school = ? AND nick_key = ?', school.code, key).toArray().length) {
       return { status: 409, error: '같은 학교에 이미 있는 닉네임이에요. 다른 닉네임을 적어 주세요.', code: 'nick_taken' };
     }
+    this.ensureSchools();
+    const newSchool = !this.sql.exec('SELECT 1 FROM accounts WHERE school = ? LIMIT 1', school.code).toArray().length;
     const salt = randomHex(16);
     const now = Date.now();
     this.sql.exec(`INSERT INTO accounts (school, school_name, sido, nick, nick_key, pin_hash, salt, created, last) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       school.code, school.name, school.sido, nick, key, await hashPin(pin, salt), salt, now, now);
     const a = this.sql.exec('SELECT * FROM accounts WHERE school = ? AND nick_key = ?', school.code, key).one();
+    if (newSchool) { this.bump('schools'); this.cache = null; }
     return { status: 200, token: await this.newSession(a.id), account: this.publicAccount(a), created: true };
   }
   async login({ school, nick, pin }, ip) {
@@ -265,7 +280,8 @@ export class Stats extends DurableObject {
     this.sql.exec(`INSERT INTO saves (id, account_id, data, map, diff, wave, saved_at, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (account_id, id) DO UPDATE SET data = excluded.data, map = excluded.map, diff = excluded.diff, wave = excluded.wave, saved_at = excluded.saved_at, updated = excluded.updated`,
       id, accountId, JSON.stringify(data), clean(data.map, 20), clean(data.diff, 20), Number(data.wave) || 0, savedAt, now);
-    this.sql.exec(`DELETE FROM saves WHERE account_id = ? AND id NOT IN (SELECT id FROM saves WHERE account_id = ? ORDER BY saved_at DESC LIMIT ${MAX_SAVES})`, accountId, accountId);
+    // 새 저장이 생길 때만 오래된 저장 정리 (같은 판을 덮어쓸 때는 개수가 그대로라 정리할 필요 없음)
+    if (!old) this.sql.exec(`DELETE FROM saves WHERE account_id = ? AND id NOT IN (SELECT id FROM saves WHERE account_id = ? ORDER BY saved_at DESC LIMIT ${MAX_SAVES})`, accountId, accountId);
     return { status: 200, ok: true };
   }
   deleteSave(accountId, id) {
@@ -304,13 +320,17 @@ export class Stats extends DurableObject {
       this.sql.exec('INSERT INTO runs (account_id, run_id, diff, map, score, wave, first_wave, started, last_submit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         a.id, runId, diff, map, score, wave, wave, now, now);
     }
-    const before = this.sql.exec('SELECT score FROM best WHERE account_id = ? AND diff = ?', a.id, diff).toArray()[0];
-    const top = this.sql.exec('SELECT run_id, score, wave, map FROM runs WHERE account_id = ? AND diff = ? ORDER BY score DESC, last_submit ASC LIMIT 1', a.id, diff).one();
-    if (!before || before.score !== top.score) {
+    const before = this.sql.exec('SELECT score, wave, map, run_id FROM best WHERE account_id = ? AND diff = ?', a.id, diff).toArray()[0];
+    // 최고 기록 판 고르기: 이 판이 최고 기록 이상이면 이 판, 최고 기록 판의 점수가 내려갔을 때(다시 도전)만 판들을 다시 훑음
+    let top;
+    if (!before || score >= before.score) top = { run_id: runId, score, wave, map };
+    else if (before.run_id === runId) top = this.sql.exec('SELECT run_id, score, wave, map FROM runs WHERE account_id = ? AND diff = ? ORDER BY score DESC, last_submit ASC LIMIT 1', a.id, diff).one();
+    else top = before;
+    if (!before || before.score !== top.score || before.run_id !== top.run_id) {
       this.sql.exec(`INSERT INTO best (account_id, diff, school, score, wave, map, run_id, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (account_id, diff) DO UPDATE SET school = excluded.school, score = excluded.score, wave = excluded.wave, map = excluded.map, run_id = excluded.run_id, updated = excluded.updated`,
         a.id, diff, a.school, top.score, top.wave, top.map, top.run_id, now);
-      this.rankCache.clear();
+      this.lbPut(diff, { account_id: a.id, school: a.school, score: top.score, wave: top.wave, map: top.map, updated: now, nick: a.nick, school_name: a.school_name, sido: a.sido });
     }
     // 오래된 판 기록 정리 (최근 200판 + 난이도별 최고 기록 판은 남김)
     if (Math.random() < 0.05) this.sql.exec(`DELETE FROM runs WHERE account_id = ? AND run_id NOT IN
@@ -319,35 +339,54 @@ export class Stats extends DurableObject {
     const newBest = top.run_id === runId && (!before || top.score > before.score);
     return { status: 200, ok: true, newBest, best: top.score, rank: this.rankOf(diff, top.score, '') };
   }
+  // ---------- 메모리 랭킹표 ----------
+  // 난이도마다 최고 기록을 점수 높은 순으로 메모리에 올려 둠. 처음 한 번만 표를 읽고, 그 뒤로는 기록이 바뀔 때만 고침
+  lbLoad() {
+    if (this.lb) return this.lb;
+    const lb = {};
+    DIFF_KEYS.forEach((d) => { lb[d] = []; });
+    this.sql.exec(`SELECT b.account_id, b.diff, b.school, b.score, b.wave, b.map, b.updated, c.nick, c.school_name, c.sido
+      FROM best b JOIN accounts c ON c.id = b.account_id`).toArray().forEach((r) => { if (lb[r.diff]) lb[r.diff].push(r); });
+    DIFF_KEYS.forEach((d) => lb[d].sort(lbCmp));
+    this.lb = lb;
+    return lb;
+  }
+  lbPut(diff, row) {
+    const list = this.lbLoad()[diff];
+    const i = list.findIndex((r) => r.account_id === row.account_id);
+    if (i >= 0) list.splice(i, 1);
+    let lo = 0, hi = list.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (lbCmp(list[mid], row) <= 0) lo = mid + 1; else hi = mid; }
+    list.splice(lo, 0, row);
+  }
+  // 등수 = 나보다 점수가 높은 사람 수 + 1 (같은 점수는 같은 등수)
   rankOf(diff, score, school) {
-    const row = school
-      ? this.sql.exec('SELECT COUNT(*) AS n FROM best WHERE diff = ? AND school = ? AND score > ?', diff, school, score).one()
-      : this.sql.exec('SELECT COUNT(*) AS n FROM best WHERE diff = ? AND score > ?', diff, score).one();
-    return row.n + 1;
+    const list = this.lbLoad()[diff];
+    if (school) { let n = 0; for (const r of list) { if (r.score <= score) break; if (r.school === school) n++; } return n + 1; }
+    let lo = 0, hi = list.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (list[mid].score > score) lo = mid + 1; else hi = mid; }
+    return lo + 1;
   }
   rankRow(r, rank) {
     return { rank, accountId: r.account_id, nick: r.nick, schoolName: r.school_name, sido: r.sido, score: r.score, wave: r.wave, map: r.map };
   }
   ranking(diff, school, a) {
-    const key = diff + '|' + school;
-    let top = this.rankCache.get(key);
-    if (!top || Date.now() - top.at > RANK_CACHE_MS) {
-      const sel = `SELECT b.account_id, b.score, b.wave, b.map, c.nick, c.school_name, c.sido FROM best b JOIN accounts c ON c.id = b.account_id`;
-      const list = school
-        ? this.sql.exec(`${sel} WHERE b.diff = ? AND b.school = ? ORDER BY b.score DESC, b.updated ASC LIMIT ${RANK_TOP}`, diff, school).toArray()
-        : this.sql.exec(`${sel} WHERE b.diff = ? ORDER BY b.score DESC, b.updated ASC LIMIT ${RANK_TOP}`, diff).toArray();
-      // 같은 점수는 같은 등수
-      let prev = null, rank = 0;
-      const rows = list.map((r, i) => { if (r.score !== prev) { rank = i + 1; prev = r.score; } return this.rankRow(r, rank); });
-      top = { at: Date.now(), rows };
-      this.rankCache.set(key, top);
+    const list = this.lbLoad()[diff];
+    const rows = [];
+    let prev = null, rank = 0, i = 0;
+    for (const r of list) {
+      if (school && r.school !== school) continue;
+      i++;
+      if (r.score !== prev) { rank = i; prev = r.score; }
+      rows.push(this.rankRow(r, rank));
+      if (rows.length >= RANK_TOP) break;
     }
     let me = null;
     if (a && (!school || school === a.school)) {
-      const b = this.sql.exec('SELECT score, wave, map FROM best WHERE account_id = ? AND diff = ?', a.id, diff).toArray()[0];
-      if (b) me = this.rankRow({ account_id: a.id, nick: a.nick, school_name: a.school_name, sido: a.sido, score: b.score, wave: b.wave, map: b.map }, this.rankOf(diff, b.score, school));
+      const b = list.find((r) => r.account_id === a.id);
+      if (b) me = this.rankRow(b, this.rankOf(diff, b.score, school));
     }
-    return { status: 200, rows: top.rows, me };
+    return { status: 200, rows, me };
   }
 
   // ---------- 요청 처리 (Worker가 넘겨 줌) ----------
