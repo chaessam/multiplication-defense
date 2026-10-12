@@ -18,6 +18,14 @@ const Account = (() => {
   function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* 무시 */ } }
   function readJson(k) { try { return JSON.parse(lsGet(k)); } catch (e) { return null; } }
 
+  // 서버가 멈춤(클라우드플레어 무료 한도 초과 등): 서버가 JSON이 아닌 오류 화면을 돌려줄 때
+  let serverDown = false;
+  const downListeners = [];
+  function markDown(v) {
+    if (serverDown === v) return;
+    serverDown = v;
+    downListeners.forEach(fn => fn(v));
+  }
   let session = readJson(SESSION_KEY); // { token, account: { id, school, schoolName, sido, nick } }
   if (!session || !session.token || !session.account) session = null;
 
@@ -29,14 +37,31 @@ const Account = (() => {
     let res;
     try { res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' }); }
     catch (e) { return { ok: false, offline: true, error: '서버에 연결할 수 없어요. 인터넷 연결을 확인하고 다시 해 주세요.' }; }
-    let data = {};
-    try { data = await res.json(); } catch (e) { data = {}; }
+    let data = null;
+    try { data = await res.json(); } catch (e) { data = null; }
+    // 게임 서버의 오류는 늘 JSON으로 옴. JSON이 아닌 오류 = 클라우드플레어가 서버를 막은 것
+    if (!res.ok && !data) { markDown(true); return { ok: false, status: res.status, down: true, error: '서버가 잠시 멈췄어요. ' + resetText() + ' 다시 작동해요.' }; }
+    markDown(false);
+    data = data || {};
     if (res.status === 401 && data.code === 'no_session') { setSession(null); }
     return Object.assign({ ok: res.ok, status: res.status }, data);
   }
   function setSession(s) {
     session = s;
     if (s) lsSet(SESSION_KEY, JSON.stringify(s)); else lsDel(SESSION_KEY);
+  }
+
+  // 클라우드플레어 무료 한도는 매일 0시(UTC) = 한국 시간 오전 9시에 다시 채워짐
+  // (기기 시계의 시간대와 상관없이 한국 시간으로 계산)
+  function resetText() {
+    const kstHour = (new Date().getUTCHours() + 9) % 24;
+    return `${kstHour < 9 ? '오늘' : '내일'} 오전 9시부터`;
+  }
+  // 서버 상태 확인 (가벼운 통계 요청)
+  async function ping() {
+    if (!hasServer) return true;
+    const r = await api('GET', '/api/stats');
+    return !r.down;
   }
 
   // ---------- 학교 목록 ----------
@@ -94,12 +119,12 @@ const Account = (() => {
   // ---------- 로그인 ----------
   async function login(school, nick, pin) {
     const r = await api('POST', '/api/login', { school, nick, pin });
-    if (r.ok && r.token) { setSession({ token: r.token, account: r.account }); migrateOldSaves(); }
+    if (r.ok && r.token) { setSession({ token: r.token, account: r.account }); migrateOldSaves(); adoptGuestRuns(); }
     return r;
   }
   async function register(school, nick, pin) {
     const r = await api('POST', '/api/register', { school, nick, pin });
-    if (r.ok && r.token) { setSession({ token: r.token, account: r.account }); migrateOldSaves(); }
+    if (r.ok && r.token) { setSession({ token: r.token, account: r.account }); migrateOldSaves(); adoptGuestRuns(); }
     return r;
   }
   async function logout() {
@@ -111,8 +136,8 @@ const Account = (() => {
     if (!hasServer || !session) return !!session || !hasServer;
     const r = await api('GET', '/api/me');
     if (r.ok && r.account) { setSession({ token: session.token, account: r.account }); return true; }
-    if (r.offline) return true;
-    return false;
+    // 로그인 표시가 정말 없어졌을 때만 로그아웃 (서버가 멈췄거나 인터넷이 끊긴 때는 그대로 둠)
+    return r.status !== 401;
   }
 
   // ---------- 저장 목록 (게임 한 판 = 저장 하나) ----------
@@ -185,6 +210,14 @@ const Account = (() => {
     for (const run of dirty) await pushRun(run);
     return { ok: true };
   }
+  // 서버가 멈췄을 때 로그인 없이 연습한 판 → 다음에 로그인한 계정의 저장 목록으로 옮김
+  function adoptGuestRuns() {
+    const k = RUNS_PREFIX + 'guest';
+    const g = readJson(k);
+    if (!g || !g.runs || !hasServer) return;
+    Object.keys(g.runs).forEach(id => putRun(Object.assign({}, g.runs[id], { savedAt: g.runs[id].savedAt || Date.now() })));
+    lsDel(k);
+  }
   // 예전 버전 저장(맵마다 1개, 또는 1개뿐인 저장) → 저장 목록으로 (이 기기에서 한 번만)
   function migrateOldSaves() {
     if (lsGet(MIGRATED_KEY)) return;
@@ -236,7 +269,8 @@ const Account = (() => {
   }
 
   return {
-    hasServer, submitScore, getRank, syncProfile, pushProfile,
+    hasServer, submitScore, getRank, syncProfile, pushProfile, ping, resetText,
+    get serverDown() { return serverDown; }, onDown(fn) { downListeners.push(fn); },
     get owner() { return owner(); },
     get required() { return hasServer; },
     get session() { return session; },
