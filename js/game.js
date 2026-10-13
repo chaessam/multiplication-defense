@@ -1556,6 +1556,7 @@
   }
   function goTitle() {
     Account.flushRuns();
+    Account.pushProfile();
     S.mode = 'title';
     clearField(true);
     Sound.setMode('title');
@@ -1851,7 +1852,6 @@
   // ---------- 점수 보내기 · 랭킹 ----------
   const fmt = n => Number(n || 0).toLocaleString('ko-KR');
   function submitScore() {
-    Account.pushProfile();
     if (!S.ranked || !S.runId || !Account.account) return;
     const payload = { runId: S.runId, diff: S.lowest, map: S.map, wave: S.wave, score: S.score || 0, cleared: !!S.cleared };
     Account.submitScore(payload).then(r => {
@@ -2275,7 +2275,8 @@
   else if (Account.required) Account.verify().then(ok => { if (!ok) { Profile.useOwner('guest'); openLogin(); } else syncAll(); });
   else titleNotices();
   // 플레이 기록은 바뀐 것이 있을 때 가끔, 그리고 화면을 떠날 때 서버에 올림
-  setInterval(() => { if (S.mode !== 'wave') Account.pushProfile(); }, 30000);
+  // (웨이브마다 올리면 서버 쓰기 한도를 금방 쓰므로 5분에 한 번 · 처음 화면으로 갈 때 · 화면을 떠날 때만)
+  setInterval(() => { if (S.mode !== 'wave') Account.pushProfile(); }, 5 * 60 * 1000);
   document.addEventListener('visibilitychange', () => { if (document.hidden) { Account.pushProfile(); Account.flushRuns(true); } });
   window.addEventListener('pagehide', () => Account.flushRuns(true));
   updateControls();
