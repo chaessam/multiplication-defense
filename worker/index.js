@@ -144,8 +144,9 @@ export class Stats extends DurableObject {
         account_id INTEGER NOT NULL, diff TEXT NOT NULL, school TEXT, score INTEGER NOT NULL, wave INTEGER, map TEXT,
         run_id TEXT, updated INTEGER, PRIMARY KEY (account_id, diff)
       );
-      CREATE INDEX IF NOT EXISTS best_rank ON best (diff, score DESC);
-      CREATE INDEX IF NOT EXISTS best_school ON best (diff, school, score DESC);
+      -- 순위는 메모리 랭킹표로 계산하므로 best 표의 순위용 인덱스는 지움 (기록이 바뀔 때마다 인덱스까지 쓰여 쓰기 한도를 더 씀)
+      DROP INDEX IF EXISTS best_rank;
+      DROP INDEX IF EXISTS best_school;
       CREATE TABLE IF NOT EXISTS profiles (account_id INTEGER PRIMARY KEY, data TEXT NOT NULL, updated INTEGER);
       CREATE TABLE IF NOT EXISTS ip_limits (ip TEXT NOT NULL, kind TEXT NOT NULL, win INTEGER NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (ip, kind, win));
     `);
