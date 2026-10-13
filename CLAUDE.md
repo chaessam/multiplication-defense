@@ -12,3 +12,4 @@
 - 서버(worker/index.js)는 클라우드플레어 **무료 플랜**: Durable Object SQLite는 하루 읽기 500만 행·쓰기 10만 행 한도가 있다.
   요청마다 표 전체를 훑는 쿼리(COUNT(*), COUNT(DISTINCT …), 인덱스 없는 정렬 등)를 쓰지 말고, 카운터나 메모리 캐시를 쓴다.
   사이트에 없는 파일을 요청하는 것도 Worker 호출(하루 10만 건 한도)로 잡히니 피한다.
+- 로그(Observability)도 계정 전체 하루 20만 건 한도라 `wrangler.jsonc`에서 10번 중 1번만 저장한다 (`head_sampling_rate: 0.1`). 1로 되돌리지 않는다.
