@@ -794,6 +794,7 @@
     if (S.mode !== 'prep' || S.pendingCards) return;
     if (!S.runId) S.runId = Account.newRunId();
     S.preWave = snapshot(); // 이 웨이브를 다시 도전할 때 돌아갈 상태 (웨이브 시작 직전)
+    Account.flushRuns(); // 준비 시간에 바꾼 저장은 웨이브를 시작할 때 서버에 한 번만 올림
     S.mode = 'wave';
     S.queue = buildWave(S.wave);
     S.spawnT = S.queue[0].delay;
@@ -1554,6 +1555,7 @@
     requestAnimationFrame(resize);
   }
   function goTitle() {
+    Account.flushRuns();
     S.mode = 'title';
     clearField(true);
     Sound.setMode('title');
@@ -2274,7 +2276,8 @@
   else titleNotices();
   // 플레이 기록은 바뀐 것이 있을 때 가끔, 그리고 화면을 떠날 때 서버에 올림
   setInterval(() => { if (S.mode !== 'wave') Account.pushProfile(); }, 30000);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) Account.pushProfile(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { Account.pushProfile(); Account.flushRuns(true); } });
+  window.addEventListener('pagehide', () => Account.flushRuns(true));
   updateControls();
   requestAnimationFrame(frame);
   if (window.ResizeObserver) new ResizeObserver(() => resize()).observe(wrap);
