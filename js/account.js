@@ -30,12 +30,13 @@ const Account = (() => {
   if (!session || !session.token || !session.account) session = null;
 
   // ---------- 서버 요청 ----------
-  async function api(method, path, body) {
+  // keep: 화면을 떠나는 중에도 끝까지 보냄 (64KB까지)
+  async function api(method, path, body, keep) {
     const headers = {};
     if (body) headers['content-type'] = 'application/json';
     if (session && session.token) headers.authorization = 'Bearer ' + session.token;
     let res;
-    try { res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' }); }
+    try { res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined, cache: 'no-store', keepalive: !!keep }); }
     catch (e) { return { ok: false, offline: true, error: '서버에 연결할 수 없어요. 인터넷 연결을 확인하고 다시 해 주세요.' }; }
     let data = null;
     try { data = await res.json(); } catch (e) { data = null; }
@@ -162,6 +163,7 @@ const Account = (() => {
   }
   function getRun(id) { const d = readRuns(); return id && d.runs[id] ? d.runs[id] : null; }
   function strip(run) { const c = Object.assign({}, run); delete c.dirty; return c; }
+  const pendingRuns = {}; // 서버에 아직 안 올린 저장 id
   function putRun(run) {
     if (!run || !run.id) return;
     const d = readRuns();
@@ -169,10 +171,21 @@ const Account = (() => {
     run.dirty = !!(hasServer && session);
     d.runs[run.id] = run;
     writeRuns(d);
-    if (run.dirty) pushRun(run);
+    // 서버에는 바로 보내지 않고 모아 둠: 준비 시간에 탑을 짓거나 강화할 때마다 보내면
+    // 서버 무료 한도(하루 쓰기 10만 줄)를 금방 다 씀. 웨이브를 시작할 때·화면을 떠날 때 flushRuns()로 한꺼번에 올림.
+    // 못 올린 저장은 dirty로 남아 있다가 다음 sync()에서 올라감
+    if (run.dirty) pendingRuns[run.id] = true;
   }
-  async function pushRun(run) {
-    const r = await api('PUT', '/api/saves/' + run.id, { data: strip(run) });
+  function flushRuns(keep) {
+    if (!hasServer || !session) return;
+    Object.keys(pendingRuns).forEach(id => {
+      delete pendingRuns[id];
+      const run = getRun(id);
+      if (run && run.dirty) pushRun(run, keep);
+    });
+  }
+  async function pushRun(run, keep) {
+    const r = await api('PUT', '/api/saves/' + run.id, { data: strip(run) }, keep);
     if (r.ok) {
       const d = readRuns();
       if (d.runs[run.id] && d.runs[run.id].savedAt === run.savedAt) { d.runs[run.id].dirty = false; writeRuns(d); }
@@ -277,6 +290,6 @@ const Account = (() => {
     get account() { return session ? session.account : null; },
     login, register, logout, verify,
     loadSchools, searchSchools, placeOf, shortSchool, loadProfanity, hasProfanity, cleanNick,
-    newRunId, listRuns, getRun, putRun, deleteRun, sync, migrateOldSaves,
+    newRunId, listRuns, getRun, putRun, flushRuns, deleteRun, sync, migrateOldSaves,
   };
 })();
