@@ -14,5 +14,11 @@
     "bindings": [{ "name": "STATS", "class_name": "Stats" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Stats"] }],
-  "observability": { "enabled": true }
+  // 로그: 무료 플랜은 하루 20만 건까지 저장 (같은 계정의 다른 게임과 함께 씀).
+  // 요청 하나하나가 로그로 남아 금방 차서, 10번 중 1번만 저장 (같은 에러는 여러 번 나므로 원인 찾기에는 충분).
+  // 게임 동작과는 상관없음
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 0.1 }
+  }
 }
