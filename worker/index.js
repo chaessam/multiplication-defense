@@ -29,6 +29,17 @@ const MAP_KEYS = ['forest', 'desert', 'snow', 'volcano'];
 const RANK_TOP = 100;
 const SCORE_GAP_MS = 2000;             // 같은 판은 이 간격보다 자주 보내지 못함
 const MIN_WAVE_MS = 5000;              // 웨이브 하나는 아무리 빨라도 이보다 오래 걸림
+// 운영자 계정 ('오늘 현황'을 볼 수 있음): 전남광주 광산구 송우초등학교 채쌤
+const ADMINS = [['7402200', '채쌤']];
+const isAdmin = (a) => !!a && ADMINS.some(([s, n]) => s === a.school && n === a.nick);
+const ADMIN_STATS_CACHE_MS = 2 * 60 * 1000;
+// 한국 시간 오늘 날짜("2026-10-15")와 오늘 0시(ms)
+const KST_MS = 9 * 3600 * 1000;
+function kstToday(now = Date.now()) {
+  const d = new Date(now + KST_MS);
+  const start = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - KST_MS;
+  return { day: new Date(start + KST_MS).toISOString().slice(0, 10), start };
+}
 
 // 랭킹 순서: 점수 높은 순, 같으면 먼저 기록한 사람이 위
 const lbCmp = (x, y) => (y.score - x.score) || (x.updated - y.updated);
@@ -148,6 +159,8 @@ export class Stats extends DurableObject {
       DROP INDEX IF EXISTS best_rank;
       DROP INDEX IF EXISTS best_school;
       CREATE TABLE IF NOT EXISTS profiles (account_id INTEGER PRIMARY KEY, data TEXT NOT NULL, updated INTEGER);
+      -- 운영자 '오늘 현황'용: 날마다 첫 판 때 누적 판 수·플레이어 수를 한 줄 적어 둠 (하루 1줄만 씀)
+      CREATE TABLE IF NOT EXISTS days (day TEXT PRIMARY KEY, games INTEGER, players INTEGER);
       CREATE TABLE IF NOT EXISTS ip_limits (ip TEXT NOT NULL, kind TEXT NOT NULL, win INTEGER NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (ip, kind, win));
     `);
     this.cache = null;
@@ -179,7 +192,39 @@ export class Stats extends DurableObject {
     this.cache = { at: Date.now(), data };
     return data;
   }
+  // 오늘 처음 기록할 때 지금까지의 누적 숫자를 적어 둠 → 오늘 판 수 = 지금 누적 − 오늘 아침 누적
+  ensureDay() {
+    const { day } = kstToday();
+    if (this.dayReady === day) return;
+    if (!this.sql.exec('SELECT 1 FROM days WHERE day = ?', day).toArray().length) {
+      this.sql.exec('INSERT OR IGNORE INTO days (day, games, players) VALUES (?, ?, ?)', day, this.counter('games'), this.counter('players'));
+    }
+    this.dayReady = day;
+  }
+  // 운영자만: 오늘 현황 (이미 있는 기록으로 셈, 따로 쓰는 것 없음. 2분 동안 기억)
+  adminToday(a) {
+    if (!isAdmin(a)) return { status: 403, error: '운영자만 볼 수 있어요.' };
+    if (this.adminCache && Date.now() - this.adminCache.at < ADMIN_STATS_CACHE_MS) return this.adminCache.data;
+    this.ensureDay();
+    this.ensureSchools();
+    const { day, start } = kstToday();
+    const snap = this.sql.exec('SELECT games, players FROM days WHERE day = ?', day).one();
+    const data = {
+      status: 200, ok: true, day, at: Date.now(),
+      devices: this.sql.exec('SELECT COUNT(*) AS n FROM devices WHERE last >= ?', start).one().n, // 오늘 게임을 시작한 기기
+      accounts: this.sql.exec('SELECT COUNT(DISTINCT account_id) AS n FROM sessions WHERE last >= ?', start).one().n, // 오늘 들어온 계정 (대략)
+      games: this.counter('games') - snap.games,
+      newDevices: this.counter('players') - snap.players,
+      newAccounts: this.sql.exec('SELECT COUNT(*) AS n FROM accounts WHERE created >= ?', start).one().n,
+      totalAccounts: this.sql.exec('SELECT COUNT(*) AS n FROM accounts').one().n,
+      totalPlayers: this.counter('players'),
+      totalSchools: this.counter('schools'),
+    };
+    this.adminCache = { at: Date.now(), data };
+    return data;
+  }
   played(id) {
+    this.ensureDay();
     const now = Date.now();
     const row = this.sql.exec('SELECT last FROM devices WHERE id = ?', id).toArray()[0];
     if (!row) {
@@ -203,7 +248,9 @@ export class Stats extends DurableObject {
 
   // ---------- 계정 ----------
   publicAccount(a) {
-    return { id: a.id, school: a.school, schoolName: a.school_name, sido: a.sido, nick: a.nick };
+    const p = { id: a.id, school: a.school, schoolName: a.school_name, sido: a.sido, nick: a.nick };
+    if (isAdmin(a)) p.admin = true;
+    return p;
   }
   async newSession(accountId) {
     const token = randomHex(32);
@@ -408,6 +455,7 @@ export class Stats extends DurableObject {
     if (op === 'score') return this.submitScore(a, body);
     if (op === 'getProfile') return this.getProfile(a.id);
     if (op === 'putProfile') return this.putProfile(a.id, body.data);
+    if (op === 'adminToday') return this.adminToday(a);
     return { status: 404, error: 'not found' };
   }
 }
@@ -460,6 +508,7 @@ export default {
     }
     if (p === '/api/logout' && m === 'POST') return call(env, { op: 'logout', token });
     if (p === '/api/me' && m === 'GET') return call(env, { op: 'me', token });
+    if (p === '/api/admin/today' && m === 'GET') return call(env, { op: 'adminToday', token });
     if (p === '/api/saves' && m === 'GET') return call(env, { op: 'saves', token });
     if (p === '/api/score' && m === 'POST') {
       const b = (await readJson(request)) || {};

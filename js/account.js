@@ -291,5 +291,6 @@ const Account = (() => {
     login, register, logout, verify,
     loadSchools, searchSchools, placeOf, shortSchool, loadProfanity, hasProfanity, cleanNick,
     newRunId, listRuns, getRun, putRun, flushRuns, deleteRun, sync, migrateOldSaves,
+    adminToday: () => api('GET', '/api/admin/today'), // 운영자만 (서버가 확인)
   };
 })();

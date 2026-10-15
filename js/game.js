@@ -1362,7 +1362,10 @@
       $('btnLogout').onclick = () => { practice = false; hide('title'); openLogin(); };
     }
     if (ac) {
-      $('acctBar').innerHTML = `${I('home')} <span>${esc(Account.shortSchool(ac.schoolName))} · <b>${esc(ac.nick)}</b></span><button id="btnLogout" type="button">로그아웃</button>`;
+      $('acctBar').innerHTML = `${I('home')} <span>${esc(Account.shortSchool(ac.schoolName))} · <b>${esc(ac.nick)}</b></span>`
+        + (ac.admin ? '<button id="btnAdminToday" type="button">📊 오늘 현황</button>' : '')
+        + '<button id="btnLogout" type="button">로그아웃</button>';
+      if (ac.admin) $('btnAdminToday').onclick = () => openAdminToday();
       $('btnLogout').onclick = () => {
         const b = $('btnLogout');
         if (!b.classList.contains('confirm')) { b.classList.add('confirm'); b.textContent = '정말 로그아웃?'; return; }
@@ -1376,6 +1379,29 @@
     loadPlayerStats();
     $('bestInfo').innerHTML = `${I('map')} 열린 맵 ${open}/4 · ${I('star')} 별 ${stars}/12 · ${I('trophy')} 업적 ${Profile.achCount()}/${ACH.length}`;
     $('achCount').textContent = `${Profile.achCount()}/${ACH.length}`;
+  }
+  // 운영자만: 오늘 현황 (한국 시간 0시부터 지금까지)
+  function openAdminToday() {
+    openModal('📊 오늘 현황', '<p class="admin-wait">불러오는 중...</p>');
+    $('modalTitle').dataset.kind = 'admin';
+    Account.adminToday().then(r => {
+      if ($('modalTitle').dataset.kind !== 'admin') return;
+      if (!r || !r.ok) { $('modalBody').innerHTML = `<p class="admin-wait">${esc((r && r.error) || '불러오지 못했어요.')}</p>`; return; }
+      const n = v => Number(v || 0).toLocaleString('ko-KR');
+      const t = new Date(r.at);
+      const hm = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0');
+      const items = [
+        ['오늘 게임한 기기', n(r.devices), '대 (게임을 시작한 기기)'],
+        ['오늘 시작한 판', n(r.games), '판'],
+        ['오늘 들어온 계정', n(r.accounts), '명 (대략)'],
+        ['오늘 새로 만든 계정', n(r.newAccounts), '명'],
+        ['오늘 처음 온 기기', n(r.newDevices), '대'],
+        ['전체 계정', n(r.totalAccounts), `참여 학교 ${n(r.totalSchools)}개`],
+      ];
+      $('modalBody').innerHTML = `<p class="admin-day">${esc(r.day)} · ${hm} 기준</p><div class="admin-grid">`
+        + items.map(([l, v, s]) => `<div class="admin-item"><span>${l}</span><b>${v}</b><small>${s}</small></div>`).join('')
+        + '</div><p class="admin-note">한국 시간 0시부터 지금까지예요. 운영자 계정에만 보여요. (2분마다 새로 셈)</p>';
+    });
   }
   // ================= 영웅 고르기 =================
   const josaWa = w => ((w.charCodeAt(w.length - 1) - 0xAC00) % 28 ? '과' : '와');
