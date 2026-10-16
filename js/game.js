@@ -1444,7 +1444,8 @@
   // ================= 처음 화면 알림 (업데이트 안내 · 새 영웅) =================
   // 2: 랭크제 큰 업데이트 안내, 3: 추가 안내 (새 게임부터 랭킹, 예전 저장 위치, 웨이브 다시 도전, 골드 규칙)
   //    이미 2를 본 계정에는 추가된 내용만 짧게 보여 줌
-  const NOTICE_VER = 3;
+  // 4: 서버를 넓혔어요 (유료 확장) — 3까지 본 계정에는 이것만 보여 줌
+  const NOTICE_VER = 4;
   function titleNotices() {
     if (S.mode !== 'title' || modalOpen || !$('login').classList.contains('hidden')) return;
     const P = Profile.data;
@@ -1458,16 +1459,17 @@
         : '이 기기에서 업데이트 전에 하던 게임은 이 기기에서 처음 로그인한 계정의 <b>이어하기</b> 목록으로 자동으로 옮겨져요.';
       const retry = nt('retry', '웨이브 다시 도전', '웨이브 점수가 마음에 들지 않으면 결과 화면에서 <b>다시 도전</b>! 마지막으로 깬 점수만 총점에 들어가요.');
       const gold = nt('coin', '골드는 막타로!', '보통 이상에서는 탑으로 지치게 한 적(<b>막타!</b>)을 정답으로 쓰러뜨릴 때만 골드를 얻어요. 방패만 깬 정답은 골드가 없어요.');
-      const body = seen >= 2
+      const serverUp = `<div class="nt server-up"><span>${I('bolt')}</span><div><b>서버를 넓혔어요!</b><small>전국에서 정말 많은 친구들이 함께해 줘서 며칠 동안 서버가 멈추는 일이 있었어요. 기다려 준 친구들 고마워요!<br>그래서 <b>서버를 유료로 넓혔어요.</b> 이제 친구들이 아무리 많이 몰려도 멈추지 않아요. 마음껏 즐겨 주세요!</small></div></div>`;
+      const body = serverUp + (seen >= 3 ? '' : seen >= 2
         ? nt('crown', '랭킹은 새 게임부터', rankNew) + nt('scroll', '예전에 하던 게임은 이어하기에', oldSaves) + retry + gold
         : nt('crown', '랭킹이 생겼어요', `적을 쓰러뜨리면 점수를 얻어요. 난이도마다 <b>한 판 최고 점수</b>로 전체 · 우리 학교 순위를 매겨요. 처음 화면의 <b>랭킹</b>에서 확인!<br>${rankNew}`)
           + retry
           + nt('lock', '학교 · 닉네임 · 비밀번호 4자리로 들어가요', '비밀번호는 꼭 기억해 두세요. <b>10번 틀리면 10분 동안 잠겨요.</b> 잊어버리면 새 닉네임으로 다시 만들어야 해요.')
           + nt('scroll', '저장 방법이 바뀌었어요', `게임 한 판마다 저장이 하나씩 생겨요. <b>이어하기</b>에서 골라 이어하고, <b>다른 기기</b>에서도 같은 계정으로 들어가면 이어할 수 있어요.<br>${oldSaves}`)
           + gold
-          + nt('hero', '새 영웅 3명!', '사막 · 설원 · 화산 맵을 열 때마다 새 영웅이 합류해요. 처음 화면의 <b>영웅</b>에서 골라요.');
+          + nt('hero', '새 영웅 3명!', '사막 · 설원 · 화산 맵을 열 때마다 새 영웅이 합류해요. 처음 화면의 <b>영웅</b>에서 골라요.'));
       hide('title');
-      openModal(`${I('crown')} ${seen >= 2 ? '추가 안내' : '큰 업데이트!'}`, `<div class="notice">${body}
+      openModal(`${I('crown')} ${seen >= 3 ? '알려 드려요' : seen >= 2 ? '추가 안내' : '큰 업데이트!'}`, `<div class="notice">${body}
         <button class="big-btn" id="noticeOk">${I('play')} 알겠어요!</button></div>`);
       mb('#noticeOk').onclick = () => { closeModal(); show('title'); setTimeout(titleNotices, 300); };
       return;

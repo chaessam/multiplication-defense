@@ -793,6 +793,8 @@ button { font-family: inherit; cursor: pointer; border: none; color: inherit; to
 .notice .nt small { display: block; font-size: 13px; line-height: 1.45; color: #4a5a68; }
 .notice .nt small b { display: inline; font-size: inherit; color: #c0392b; }
 .notice .big-btn { margin-top: 4px; }
+.notice .nt.server-up { background: #fff6d6; border-color: #c2410c; box-shadow: 0 3px 0 #c2410c; }
+.notice .nt.server-up > span { background: #ffd45c; }
 
 /* 웨이브 다시 도전 */
 .retry-btn { margin-top: 8px; font-size: 16px; padding: 8px 12px; }
