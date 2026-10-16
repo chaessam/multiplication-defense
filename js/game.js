@@ -160,12 +160,14 @@
   }
 
   // ================= 웨이브 구성 =================
-  // 무한 모드(30웨이브 이후): 보통 난이도의 상한(적 수·문제 간격·속도)에 닿은 뒤에도 조금씩 더 세짐
-  //   문제 간격 웨이브마다 0.4%씩 짧게(155웨이브에서 최대 50%), 적 속도 0.5%씩 빠르게(최대 40%), 10웨이브마다 적 2마리 더(최대 20)
+  // 무한 모드(30웨이브 이후): 보통 난이도의 상한(적 수·문제 간격·속도)에 닿은 뒤에도 200웨이브까지 고르게 조금씩 더 세짐
+  //   200웨이브에서 문제 간격 50% 짧게, 적 속도 40% 빠르게, 적 20마리 더 (그 뒤로는 그대로)
+  const ENDLESS_END = 200;
   const endless = w => Math.max(0, w - FINAL_WAVE);
-  const endlessGap = w => Math.max(0.5, 1 - 0.004 * endless(w));
-  const endlessSpd = w => 1 + Math.min(0.4, 0.005 * endless(w));
-  const endlessExtra = w => Math.min(20, Math.floor(endless(w) / 10) * 2);
+  const endlessK = w => Math.min(1, endless(w) / (ENDLESS_END - FINAL_WAVE)); // 0 → 1
+  const endlessGap = w => 1 - 0.5 * endlessK(w);
+  const endlessSpd = w => 1 + 0.4 * endlessK(w);
+  const endlessExtra = w => Math.floor(20 * endlessK(w));
   const endlessStage = w => Math.floor(endless(w) / 10); // 0: 31~39, 1: 40~49, …
   function buildWave(w) {
     const list = [];
@@ -810,7 +812,7 @@
     Sound.play('horn');
     Sound.setMode('battle');
     // 무한 모드에서 10웨이브마다 더 세졌다고 알림
-    if (S.wave > FINAL_WAVE && (S.wave - FINAL_WAVE) % 10 === 0) showBanner(`${I('skull')} 웨이브 ${S.wave} · 적이 더 빨라지고 많아졌어요!`, 'boss', 2200);
+    if (S.wave > FINAL_WAVE && S.wave <= ENDLESS_END && (S.wave - FINAL_WAVE) % 10 === 0) showBanner(`${I('skull')} 웨이브 ${S.wave} · 적이 더 빨라지고 많아졌어요!`, 'boss', 2200);
     else showBanner(`${I('swords')} 웨이브 ${S.wave}`, '', 1600);
     // 성문을 닫고, 첫 웨이브와 보스 웨이브에는 성문을 비춤
     World.setGate(true);
