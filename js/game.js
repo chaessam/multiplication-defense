@@ -160,9 +160,16 @@
   }
 
   // ================= 웨이브 구성 =================
+  // 무한 모드(30웨이브 이후): 보통 난이도의 상한(적 수·문제 간격·속도)에 닿은 뒤에도 조금씩 더 세짐
+  //   문제 간격 웨이브마다 0.8%씩 짧게(최대 40%), 적 속도 0.5%씩 빠르게(최대 40%), 10웨이브마다 적 2마리 더(최대 20)
+  const endless = w => Math.max(0, w - FINAL_WAVE);
+  const endlessGap = w => Math.max(0.6, 1 - 0.008 * endless(w));
+  const endlessSpd = w => 1 + Math.min(0.4, 0.005 * endless(w));
+  const endlessExtra = w => Math.min(20, Math.floor(endless(w) / 10) * 2);
+  const endlessStage = w => Math.floor(endless(w) / 10); // 0: 31~39, 1: 40~49, …
   function buildWave(w) {
     const list = [];
-    const n = Math.min(D().cBase + Math.floor(w * D().cPer), D().cMax);
+    const n = Math.min(D().cBase + Math.floor(w * D().cPer), D().cMax) + endlessExtra(w);
     const weights = {
       goblin: w >= 3 ? 2 : 0, soldier: 5,
       knight: w >= 4 ? 1 + w * 0.15 : 0,
@@ -182,7 +189,7 @@
     if (w === FINAL_WAVE) list.push('demonking');
     else if (w % 5 === 0) list.push(BOSS_ORDER[(w / 5 - 1) % BOSS_ORDER.length]);
     // 적 사이 간격 = 그 적을 쓰러뜨리는 데 필요한 정답 수 × 한 문제에 주어지는 시간
-    const perAnswer = Math.max(D().iMin, D().iStart - w * D().iDec);
+    const perAnswer = Math.max(D().iMin, D().iStart - w * D().iDec) * endlessGap(w);
     return list.map((type, i) => ({ type, delay: i === 0 ? 2 : perAnswer * ENEMIES[type].probs + (ENEMIES[type].boss ? 4 : 0) }));
   }
   function wavePreview(w) {
@@ -199,7 +206,7 @@
 
   // ================= 적 =================
   function hpMul(w) { return 1 + 0.18 * (w - 1) + 0.012 * (w - 1) * (w - 1); }
-  function spdMul(w) { return Math.min(D().spdCap, 1 + 0.035 * (w - 1)); }
+  function spdMul(w) { return Math.min(D().spdCap, 1 + 0.035 * (w - 1)) * endlessSpd(w); }
   function setEnemyPos(e) {
     const p = World.pathAt(e.t, e.lane);
     e.x = p.x; e.z = p.z; e.dx = p.dx; e.dz = p.dz;
@@ -802,7 +809,9 @@
     S.ws = { correct: 0, wrong: 0, kills: 0, gold: 0, dmg: 0, combo: 0 };
     Sound.play('horn');
     Sound.setMode('battle');
-    showBanner(`${I('swords')} 웨이브 ${S.wave}`, '', 1600);
+    // 무한 모드에서 10웨이브마다 더 세졌다고 알림
+    if (S.wave > FINAL_WAVE && (S.wave - FINAL_WAVE) % 10 === 0) showBanner(`${I('skull')} 웨이브 ${S.wave} · 적이 더 빨라지고 많아졌어요!`, 'boss', 2200);
+    else showBanner(`${I('swords')} 웨이브 ${S.wave}`, '', 1600);
     // 성문을 닫고, 첫 웨이브와 보스 웨이브에는 성문을 비춤
     World.setGate(true);
     setTimeout(() => Sound.play('gate'), 250);
@@ -1186,7 +1195,7 @@
     const el = $('prepInfo');
     if (S.mode !== 'prep') { el.classList.add('hidden'); return; }
     const p = wavePreview(S.wave);
-    let html = `${I(MAPD().icon)} ${MAPD().name} · ${I(D().icon)} ${D().name}<br>웨이브 <b>${S.wave}</b>${S.wave > FINAL_WAVE ? ' (무한)' : ` / ${FINAL_WAVE}`} · 문제 <b>${p.dan}</b> · ${p.kinds}`;
+    let html = `${I(MAPD().icon)} ${MAPD().name} · ${I(D().icon)} ${D().name}<br>웨이브 <b>${S.wave}</b>${S.wave > FINAL_WAVE ? ` (무한 ${endlessStage(S.wave) + 1}단계)` : ` / ${FINAL_WAVE}`} · 문제 <b>${p.dan}</b> · ${p.kinds}`;
     if (S.wave === FINAL_WAVE) html += ` · ${I('crown')} <b>최종 보스: ${p.boss}</b>`;
     else if (p.boss) html += ` · ${I('skull')} <b>보스: ${p.boss}</b>`;
     const nextMap = MAP_ORDER.find(m => MAPS[m].unlock === S.map);
