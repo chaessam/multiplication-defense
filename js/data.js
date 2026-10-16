@@ -140,10 +140,10 @@ const GD = (() => {
       gold: 0.9, castle: 100, startGold: 80, allDan: true, shield2: true,
     },
     expert: {
-      name: '매우 어려움', icon: 'skull', desc: '19단 모드! 11~19단이 나오고, 후반에는 19 × 19까지 나와요. 진짜 고수만 도전!',
-      // 두 자리 곱셈은 암산이 오래 걸리므로 한 문제 시간은 길게(6.5초 → 4.2초), 대신 적이 튼튼하고 많음
-      spd: 1.05, spdCap: 2.0, minSpd: 0.5, hp: 1.75, iStart: 6.5, iMin: 4.2, iDec: 0.08, cBase: 7, cPer: 1.1, cMax: 30,
-      gold: 0.75, castle: 100, startGold: 90, big: true, shield2: true,
+      name: '매우 어려움', icon: 'skull', desc: '19단 모드! 11~19단이 나오고, 후반에는 19 × 19까지 나와요. 문제가 어려운 만큼 적은 쉬움 모드처럼 느리고 적어요. 틀리면 힌트가 나와요.',
+      // 두 자리 곱셈은 그 자체로 어려우므로, 적의 속도·체력·수·문제 간격·골드는 쉬움 모드와 똑같이 (방패 규칙도 없음)
+      spd: 0.58, spdCap: 1.3, minSpd: 0.3, hp: 0.6, iStart: 7.5, iMin: 4.4, iDec: 0.12, cBase: 5, cPer: 0.7, cMax: 20,
+      gold: 1.25, castle: 150, startGold: 120, hint: true, big: true,
     },
   };
 
