@@ -161,9 +161,9 @@
 
   // ================= 웨이브 구성 =================
   // 무한 모드(30웨이브 이후): 보통 난이도의 상한(적 수·문제 간격·속도)에 닿은 뒤에도 조금씩 더 세짐
-  //   문제 간격 웨이브마다 0.8%씩 짧게(최대 40%), 적 속도 0.5%씩 빠르게(최대 40%), 10웨이브마다 적 2마리 더(최대 20)
+  //   문제 간격 웨이브마다 0.4%씩 짧게(155웨이브에서 최대 50%), 적 속도 0.5%씩 빠르게(최대 40%), 10웨이브마다 적 2마리 더(최대 20)
   const endless = w => Math.max(0, w - FINAL_WAVE);
-  const endlessGap = w => Math.max(0.6, 1 - 0.008 * endless(w));
+  const endlessGap = w => Math.max(0.5, 1 - 0.004 * endless(w));
   const endlessSpd = w => 1 + Math.min(0.4, 0.005 * endless(w));
   const endlessExtra = w => Math.min(20, Math.floor(endless(w) / 10) * 2);
   const endlessStage = w => Math.floor(endless(w) / 10); // 0: 31~39, 1: 40~49, …
